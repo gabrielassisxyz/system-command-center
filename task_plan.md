@@ -69,7 +69,7 @@
 
 ## Phase 4 — Frontend & done-check
 
-- [ ] Frontend render — `index.html` + `app.js` subscribe to `/events` and render the system
+- [x] Frontend render — `index.html` + `app.js` subscribe to `/events` and render the system
   header, the per-process list, and the Docker groups, each row showing its metric. — done
   when: loading the page against a running `/events` shows the header + both lists updating
   live (observed via `bin/dev`).
