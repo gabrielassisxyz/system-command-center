@@ -14,13 +14,18 @@ const appSource = fs.readFileSync(appPath, 'utf8');
 // Create a minimal DOM-like environment that app.js expects.
 const dom = {
   system: { innerHTML: '', textContent: '' },
-  processes: { innerHTML: '' },
-  docker: { innerHTML: '' },
+  processes: { innerHTML: '', querySelector: function () { return null; }, querySelectorAll: function () { return []; } },
+  docker: { innerHTML: '', querySelectorAll: function () { return []; } },
 };
 
 global.document = {
   readyState: 'complete',
   getElementById: function (id) {
+    if (id === 'process-sort-control') {
+      return {
+        innerHTML: '<label class="sort-control">Sort by <select data-sort-select><option value="ram">RAM</option><option value="cpu">CPU</option><option value="disk_io">Disk I/O</option></select></label>',
+      };
+    }
     return dom[id];
   },
   addEventListener: function () {},
@@ -48,7 +53,7 @@ const body = appSource
 const helperSource =
   '(function () {\n' +
   body +
-  '\nreturn { escapeHtml: escapeHtml, fmtPercent: fmtPercent, fmtTemp: fmtTemp, fmtBytes: fmtBytes, fmtRate: fmtRate, sortByRamDesc: sortByRamDesc, renderSystem: renderSystem, renderProcesses: renderProcesses, renderDocker: renderDocker, render: render };' +
+  '\nreturn { escapeHtml: escapeHtml, fmtPercent: fmtPercent, fmtTemp: fmtTemp, fmtBytes: fmtBytes, fmtRate: fmtRate, sortProcesses: sortProcesses, sortByRamDesc: sortByRamDesc, renderSystem: renderSystem, renderProcesses: renderProcesses, renderDocker: renderDocker, render: render, killButton: killButton, containerButtons: containerButtons };' +
   '\n})()';
 const helpers = eval(helperSource); // eslint-disable-line no-eval
 
@@ -116,10 +121,40 @@ assertContains('renderProcesses heading', dom.processes.innerHTML, 'Processes');
 assertContains('renderProcesses first row sorted by RAM', dom.processes.innerHTML, '<tr data-pid="42">');
 assertContains('renderProcesses name', dom.processes.innerHTML, 'browser');
 assertContains('renderProcesses disk io', dom.processes.innerHTML, 'R 100 B/s');
+assertContains('renderProcesses kill button', dom.processes.innerHTML, 'data-kill-pid="42"');
+assertContains('renderProcesses sort control', dom.processes.innerHTML, 'data-sort-select');
 
 assertContains('renderDocker project', dom.docker.innerHTML, 'core');
 assertContains('renderDocker container id', dom.docker.innerHTML, 'data-container-id="c1"');
 assertContains('renderDocker ungrouped', dom.docker.innerHTML, '(ungrouped)');
+assertContains('renderDocker stop button', dom.docker.innerHTML, 'data-container-stop="c1"');
+assertContains('renderDocker restart button', dom.docker.innerHTML, 'data-container-restart="c1"');
+
+const killBtn = helpers.killButton(123);
+assertContains('killButton has pid', killBtn, 'data-kill-pid="123"');
+assertContains('killButton confirms', killBtn, 'kill 123?');
+
+const containerBtn = helpers.containerButtons('abc123');
+assertContains('containerButtons stop', containerBtn, 'data-container-stop="abc123"');
+assertContains('containerButtons restart', containerBtn, 'data-container-restart="abc123"');
+assertContains('containerButtons stop confirm', containerBtn, 'stop abc123?');
+assertContains('containerButtons restart confirm', containerBtn, 'restart abc123?');
+
+const byCpu = helpers.sortProcesses([
+  { pid: 1, cpu: 5, ram: { used: 100 } },
+  { pid: 2, cpu: 50, ram: { used: 50 } },
+  { pid: 3 },
+], 'cpu');
+assertEq('sortByCpu first', byCpu[0].pid, 2);
+assertEq('sortByCpu last', byCpu[2].pid, 3);
+
+const byDisk = helpers.sortProcesses([
+  { pid: 1, disk_io: { read: 10, write: 10 } },
+  { pid: 2, disk_io: { read: 100, write: 200 } },
+  { pid: 3, ram: { used: 1e9 } },
+], 'disk_io');
+assertEq('sortByDisk first', byDisk[0].pid, 2);
+assertEq('sortByDisk last', byDisk[2].pid, 3);
 
 if (failures) {
   console.error('\n' + failures + ' test(s) failed');

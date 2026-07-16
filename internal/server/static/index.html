@@ -13,6 +13,25 @@
     th, td { text-align: left; padding: 0.35rem 0.5rem; }
     th { border-bottom: 1px solid; }
     td.num { font-variant-numeric: tabular-nums; text-align: right; }
+    .section-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+    .section-head h2 { margin: 0; }
+    .sort-control { font-size: 0.9rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.5rem; font-size: 0.85rem; line-height: 1; border: 1px solid; border-radius: 0.25rem; background: transparent; cursor: pointer; }
+    .btn:hover { background: rgba(128,128,128,0.15); }
+    .btn-row { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+    /* Confirm spans are hidden until their action's row class is set. The yes/no
+       buttons live inside the confirm span, so we hide only the top-level action
+       buttons via the direct-child combinator (>) — a descendant rule would also
+       hide the nested yes/no and leave an unclickable confirmation. */
+    .confirm { display: none; }
+    .confirming > .kill { display: none; }
+    .confirming > .confirm { display: inline-flex; }
+    .confirming-stop > .stop, .confirming-stop > .restart,
+    .confirming-restart > .stop, .confirming-restart > .restart { display: none; }
+    .confirming-stop > .confirm-stop { display: inline-flex; }
+    .confirming-restart > .confirm-restart { display: inline-flex; }
+    .confirm .yes { border-color: currentColor; }
+    .confirm .no { border-color: transparent; }
   </style>
 </head>
 <body>
@@ -20,6 +39,15 @@
   <section id="system">Connecting…</section>
   <section id="processes"></section>
   <section id="docker"></section>
+  <template id="process-sort-control">
+    <label class="sort-control">Sort by
+      <select data-sort-select>
+        <option value="ram">RAM</option>
+        <option value="cpu">CPU</option>
+        <option value="disk_io">Disk I/O</option>
+      </select>
+    </label>
+  </template>
   <script src="/app.js"></script>
 </body>
 </html>

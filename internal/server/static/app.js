@@ -99,25 +99,48 @@
     systemEl.innerHTML = parts.join('');
   }
 
-  function sortByRamDesc(rows) {
+  function sortProcesses(rows, key) {
     return rows.slice().sort(function (a, b) {
-      const ra = (a.ram && a.ram.used) || 0;
-      const rb = (b.ram && b.ram.used) || 0;
-      return rb - ra;
+      let va = 0;
+      let vb = 0;
+      switch (key) {
+        case 'ram':
+          va = (a.ram && a.ram.used) || 0;
+          vb = (b.ram && b.ram.used) || 0;
+          break;
+        case 'cpu':
+          va = a.cpu || 0;
+          vb = b.cpu || 0;
+          break;
+        case 'disk_io':
+          va = ((a.disk_io && a.disk_io.read) || 0) + ((a.disk_io && a.disk_io.write) || 0);
+          vb = ((b.disk_io && b.disk_io.read) || 0) + ((b.disk_io && b.disk_io.write) || 0);
+          break;
+        default:
+          va = (a.ram && a.ram.used) || 0;
+          vb = (b.ram && b.ram.used) || 0;
+      }
+      return vb - va;
     });
   }
 
-  function renderProcesses(processes) {
-    const sorted = sortByRamDesc(processes);
+  function sortByRamDesc(rows) {
+    return sortProcesses(rows, 'ram');
+  }
 
-    let html = '<h2>Processes</h2>';
+  function renderProcesses(processes, sortKey) {
+    const sorted = sortProcesses(processes, sortKey || 'ram');
+
+    let html = '<div class="section-head"><h2>Processes</h2>';
+    html += document.getElementById('process-sort-control').innerHTML;
+    html += '</div>';
     if (!sorted.length) {
       processesEl.innerHTML = html + '<p>No processes.</p>';
       return;
     }
 
     html += '<table><thead><tr>';
-    html += '<th>Name</th><th>PID</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">Disk I/O</th>';
+    html += '<th>Name</th><th>PID</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">Disk I/O</th><th>Actions</th>';
     html += '</tr></thead><tbody>';
 
     for (let i = 0; i < sorted.length; i++) {
@@ -131,15 +154,138 @@
       html += '<td class="num">' + fmtPercent(p.cpu) + '</td>';
       html += '<td class="num">' + ram + '</td>';
       html += '<td class="num">R ' + diskRead + '<br>W ' + diskWrite + '</td>';
+      html += '<td>' + killButton(p.pid) + '</td>';
       html += '</tr>';
     }
 
     html += '</tbody></table>';
     processesEl.innerHTML = html;
+
+    const select = processesEl.querySelector('[data-sort-select]');
+    if (select) {
+      select.value = sortKey || 'ram';
+      select.addEventListener('change', function () {
+        renderProcesses(processes, select.value);
+      });
+    }
+    bindKillButtons(processesEl);
+  }
+
+  function killButton(pid) {
+    return '<div class="btn-row" data-kill-row="' + pid + '">' +
+      '<button class="btn kill" data-kill-pid="' + pid + '" title="Send SIGTERM to process ' + pid + '">kill</button>' +
+      '<span class="btn confirm">kill ' + pid + '? ' +
+      '<button class="btn yes" data-kill-yes="' + pid + '">yes</button>' +
+      '<button class="btn no" data-kill-no="' + pid + '">no</button>' +
+      '</span></div>';
+  }
+
+  function bindKillButtons(root) {
+    root.querySelectorAll('[data-kill-pid]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const row = root.querySelector('[data-kill-row="' + btn.dataset.killPid + '"]');
+        if (row) row.classList.add('confirming');
+      });
+    });
+    root.querySelectorAll('[data-kill-yes]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        postKill(parseInt(btn.dataset.killYes, 10));
+        const row = root.querySelector('[data-kill-row="' + btn.dataset.killYes + '"]');
+        if (row) row.classList.remove('confirming');
+      });
+    });
+    root.querySelectorAll('[data-kill-no]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const row = root.querySelector('[data-kill-row="' + btn.dataset.killNo + '"]');
+        if (row) row.classList.remove('confirming');
+      });
+    });
+  }
+
+  function postKill(pid) {
+    fetch('/api/process/kill?pid=' + pid, { method: 'POST' }).then(function (res) {
+      if (!res.ok) {
+        console.error('kill request failed:', res.status);
+        alert('Failed to kill process ' + pid + ': ' + res.status);
+      }
+    }).catch(function (err) {
+      console.error('kill request error:', err);
+      alert('Failed to kill process ' + pid + ': ' + err);
+    });
+  }
+
+  function containerButtons(id) {
+    return '<div class="btn-row" data-container-row="' + escapeHtml(id) + '">' +
+      '<button class="btn stop" data-container-stop="' + escapeHtml(id) + '" title="Stop container ' + escapeHtml(id) + '">stop</button>' +
+      '<button class="btn restart" data-container-restart="' + escapeHtml(id) + '" title="Restart container ' + escapeHtml(id) + '">restart</button>' +
+      '<span class="btn confirm confirm-stop">stop ' + escapeHtml(id) + '? ' +
+      '<button class="btn yes" data-container-stop-yes="' + escapeHtml(id) + '">yes</button>' +
+      '<button class="btn no" data-container-no="' + escapeHtml(id) + '">no</button>' +
+      '</span>' +
+      '<span class="btn confirm confirm-restart">restart ' + escapeHtml(id) + '? ' +
+      '<button class="btn yes" data-container-restart-yes="' + escapeHtml(id) + '">yes</button>' +
+      '<button class="btn no" data-container-no="' + escapeHtml(id) + '">no</button>' +
+      '</span></div>';
+  }
+
+  function bindContainerButtons(root) {
+    root.querySelectorAll('[data-container-stop]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const row = root.querySelector('[data-container-row="' + btn.dataset.containerStop + '"]');
+        if (row) row.classList.add('confirming-stop');
+      });
+    });
+    root.querySelectorAll('[data-container-restart]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const row = root.querySelector('[data-container-row="' + btn.dataset.containerRestart + '"]');
+        if (row) row.classList.add('confirming-restart');
+      });
+    });
+    root.querySelectorAll('[data-container-stop-yes]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        postContainerAction('stop', btn.dataset.containerStopYes);
+        const row = root.querySelector('[data-container-row="' + btn.dataset.containerStopYes + '"]');
+        if (row) {
+          row.classList.remove('confirming-stop');
+          row.classList.remove('confirming-restart');
+        }
+      });
+    });
+    root.querySelectorAll('[data-container-restart-yes]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        postContainerAction('restart', btn.dataset.containerRestartYes);
+        const row = root.querySelector('[data-container-row="' + btn.dataset.containerRestartYes + '"]');
+        if (row) {
+          row.classList.remove('confirming-stop');
+          row.classList.remove('confirming-restart');
+        }
+      });
+    });
+    root.querySelectorAll('[data-container-no]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const row = root.querySelector('[data-container-row="' + btn.dataset.containerNo + '"]');
+        if (row) {
+          row.classList.remove('confirming-stop');
+          row.classList.remove('confirming-restart');
+        }
+      });
+    });
+  }
+
+  function postContainerAction(action, id) {
+    fetch('/api/container/' + action + '?id=' + encodeURIComponent(id), { method: 'POST' }).then(function (res) {
+      if (!res.ok) {
+        console.error('container ' + action + ' failed:', res.status);
+        alert('Failed to ' + action + ' container ' + id + ': ' + res.status);
+      }
+    }).catch(function (err) {
+      console.error('container ' + action + ' error:', err);
+      alert('Failed to ' + action + ' container ' + id + ': ' + err);
+    });
   }
 
   function renderDocker(groups) {
-    let html = '<h2>Docker</h2>';
+    let html = '<div class="section-head"><h2>Docker</h2></div>';
     if (!groups || !groups.length) {
       dockerEl.innerHTML = html + '<p>No Docker containers.</p>';
       return;
@@ -149,7 +295,7 @@
       const g = groups[i];
       html += '<h3>' + escapeHtml(g.project) + '</h3>';
       html += '<table><thead><tr>';
-      html += '<th>Name</th><th>ID</th><th class="num">CPU</th><th class="num">RAM</th>';
+      html += '<th>Name</th><th>ID</th><th class="num">CPU</th><th class="num">RAM</th><th>Actions</th>';
       html += '</tr></thead><tbody>';
 
       for (let j = 0; j < g.containers.length; j++) {
@@ -160,6 +306,7 @@
         html += '<td>' + escapeHtml(c.id) + '</td>';
         html += '<td class="num">' + fmtPercent(c.cpu) + '</td>';
         html += '<td class="num">' + ram + '</td>';
+        html += '<td>' + containerButtons(c.id) + '</td>';
         html += '</tr>';
       }
 
@@ -167,11 +314,14 @@
     }
 
     dockerEl.innerHTML = html;
+    bindContainerButtons(dockerEl);
   }
+
+  let currentSortKey = 'ram';
 
   function render(snapshot) {
     renderSystem(snapshot.system || {});
-    renderProcesses(snapshot.processes || []);
+    renderProcesses(snapshot.processes || [], currentSortKey);
     renderDocker(snapshot.docker || []);
   }
 
