@@ -62,7 +62,7 @@
 - [x] Kill action endpoint — `POST /api/process/kill?pid=<n>` sends SIGTERM via an
   injectable killer. — done when: an httptest POST invokes the killer with the parsed pid; a
   missing/bad pid returns 400; a killer error surfaces as a 5xx with a message, not a panic.
-- [ ] Docker stop/restart endpoints — `POST /api/container/stop` and
+- [x] Docker stop/restart endpoints — `POST /api/container/stop` and
   `POST /api/container/restart` by container id via an injectable docker controller. — done
   when: httptest POSTs invoke stop/restart with the id; a missing/unknown id returns 400; a
   controller error surfaces as an error status.

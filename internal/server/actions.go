@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 // ErrProcessNotFound is returned by a ProcessKiller when the target process
 // does not exist. The HTTP handler maps it to a 404 status.
 var ErrProcessNotFound = errors.New("process not found")
+
+// ErrContainerNotFound is returned by a DockerController when the target
+// container does not exist. The HTTP handler maps it to a 400 status per
+// the task acceptance criteria.
+var ErrContainerNotFound = errors.New("container not found")
 
 // ProcessKiller abstracts sending a signal to a process by PID. The
 // production implementation sends SIGTERM; tests inject a fake to verify
@@ -46,6 +52,35 @@ func killActionHandler(killer ProcessKiller) http.HandlerFunc {
 				status = http.StatusNotFound
 			}
 			http.Error(w, fmt.Sprintf("kill failed: %v", err), status)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// containerActionHandler handles POST /api/container/stop?id=<id> and
+// POST /api/container/restart?id=<id>. It delegates to the injected controller
+// and maps errors to HTTP status codes.
+func containerActionHandler(controller DockerController, action func(context.Context, string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "missing container id", http.StatusBadRequest)
+			return
+		}
+
+		if err := action(r.Context(), id); err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, ErrContainerNotFound) {
+				status = http.StatusBadRequest
+			}
+			http.Error(w, fmt.Sprintf("container %s failed: %v", r.URL.Path, err), status)
 			return
 		}
 
