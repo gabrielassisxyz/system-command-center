@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"hardware-usage/internal/model"
@@ -16,6 +17,11 @@ import (
 const (
 	ungroupedProject = "(ungrouped)"
 	defaultVersion   = "v1.41"
+	// dockerStatsConcurrency caps how many container stats we fetch at once.
+	// The stats endpoint blocks ~1-2s per container, so fetching sequentially
+	// would freeze the whole live snapshot; the cap keeps us from opening one
+	// socket per container simultaneously on a machine with many of them.
+	dockerStatsConcurrency = 8
 )
 
 // DockerSource abstracts the Docker Engine HTTP API calls needed to list
@@ -140,14 +146,31 @@ func (c *DockerCollector) Collect(ctx context.Context) []model.ComposeGroup {
 		return nil
 	}
 
+	// Fetch every container's stats concurrently (bounded), since each call
+	// blocks ~1-2s on the daemon; a sequential loop over N containers would
+	// take N*~1.5s and stall the live page. Each goroutine writes its own
+	// index in rows, so there is no shared-state race here.
+	rows := make([]model.ContainerRow, len(containers))
+	sem := make(chan struct{}, dockerStatsConcurrency)
+	var wg sync.WaitGroup
+	for i, ctr := range containers {
+		wg.Add(1)
+		go func(i int, ctr ContainerSummary) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			rows[i] = c.row(ctx, ctr)
+		}(i, ctr)
+	}
+	wg.Wait()
+
 	groups := make(map[string][]model.ContainerRow)
-	for _, ctr := range containers {
+	for i, ctr := range containers {
 		project := ctr.Labels["com.docker.compose.project"]
 		if project == "" {
 			project = ungroupedProject
 		}
-		row := c.row(ctx, ctr)
-		groups[project] = append(groups[project], row)
+		groups[project] = append(groups[project], rows[i])
 	}
 
 	return sortGroups(groups)

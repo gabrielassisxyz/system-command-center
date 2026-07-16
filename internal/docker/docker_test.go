@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -11,6 +12,7 @@ type fakeDockerSource struct {
 	statsErr   map[string]error
 	list       []ContainerSummary
 	stats      map[string]ContainerStats
+	mu         sync.Mutex // guards statsCalls; Collect fetches stats concurrently
 	statsCalls []string
 }
 
@@ -22,7 +24,9 @@ func (f *fakeDockerSource) ContainerList(_ context.Context) ([]ContainerSummary,
 }
 
 func (f *fakeDockerSource) ContainerStats(_ context.Context, id string) (*ContainerStats, error) {
+	f.mu.Lock()
 	f.statsCalls = append(f.statsCalls, id)
+	f.mu.Unlock()
 	if f.statsErr != nil {
 		if err, ok := f.statsErr[id]; ok {
 			return nil, err
