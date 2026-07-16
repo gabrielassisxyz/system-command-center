@@ -90,7 +90,12 @@ type ProcessDiskIOCollector struct {
 
 // NewProcessDiskIOCollector creates a collector backed by src and the real clock.
 func NewProcessDiskIOCollector(src ProcIOSource) *ProcessDiskIOCollector {
-	return &ProcessDiskIOCollector{src: src, clock: realIOClock{}}
+	return NewProcessDiskIOCollectorWithClock(src, realIOClock{})
+}
+
+// NewProcessDiskIOCollectorWithClock creates a collector with an explicit clock.
+func NewProcessDiskIOCollectorWithClock(src ProcIOSource, clock ioClock) *ProcessDiskIOCollector {
+	return &ProcessDiskIOCollector{src: src, clock: clock}
 }
 
 // Collect returns diffed read/write disk I/O rates for the supplied pids.
@@ -108,7 +113,14 @@ func (c *ProcessDiskIOCollector) Collect(ctx context.Context, pids []int32) map[
 		stats[pid] = stat
 	}
 
-	sample := &procIOSample{time: now, stats: stats}
+	// Copy the source data so a caller that mutates returned maps cannot
+	// corrupt the previous sample we diff against next time.
+	statsCopy := make(map[int32]ProcIOStat, len(stats))
+	for pid, stat := range stats {
+		statsCopy[pid] = stat
+	}
+
+	sample := &procIOSample{time: now, stats: statsCopy}
 	rates := make(map[int32]model.DiskIORate, len(pids))
 
 	if c.prev != nil {

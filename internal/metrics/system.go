@@ -58,11 +58,13 @@ func (c *SystemCollector) Collect(ctx context.Context) model.SystemSnapshot {
 	var snap model.SystemSnapshot
 
 	if pcts, err := c.src.CPUPercent(ctx); err == nil && len(pcts) > 0 {
+		// Copy the value so a caller that reuses the slice cannot mutate
+		// the pointer we store in the snapshot.
 		cpu := pcts[0]
 		snap.CPU = &cpu
 	}
 
-	if vm, err := c.src.VirtualMemory(ctx); err == nil {
+	if vm, err := c.src.VirtualMemory(ctx); err == nil && vm != nil {
 		snap.RAM = &model.RAMInfo{
 			Used:  &vm.Used,
 			Total: &vm.Total,

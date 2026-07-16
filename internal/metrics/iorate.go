@@ -61,7 +61,12 @@ type IORateCollector struct {
 
 // NewIORateCollector creates a collector backed by src and the real clock.
 func NewIORateCollector(src IOSource) *IORateCollector {
-	return &IORateCollector{src: src, clock: systemClock{}}
+	return NewIORateCollectorWithClock(src, systemClock{})
+}
+
+// NewIORateCollectorWithClock creates a collector with an explicit clock.
+func NewIORateCollectorWithClock(src IOSource, clock IOClock) *IORateCollector {
+	return &IORateCollector{src: src, clock: clock}
 }
 
 // Collect returns whole-machine disk and network I/O rates. The first call
@@ -73,7 +78,16 @@ func (c *IORateCollector) Collect(ctx context.Context) (model.DiskIORate, model.
 	diskCounters, diskErr := c.src.DiskIOCounters(ctx)
 	netCounters, netErr := c.src.NetIOCounters(ctx)
 
-	sample := &ioSample{time: now, disk: diskCounters, net: netCounters}
+	// Copy the source data so a caller that mutates returned maps/slices
+	// cannot corrupt the previous sample we diff against next time.
+	diskCopy := make(map[string]disk.IOCountersStat, len(diskCounters))
+	for name, stat := range diskCounters {
+		diskCopy[name] = stat
+	}
+	netCopy := make([]net.IOCountersStat, len(netCounters))
+	copy(netCopy, netCounters)
+
+	sample := &ioSample{time: now, disk: diskCopy, net: netCopy}
 
 	var diskRate model.DiskIORate
 	var netRate model.NetIORate

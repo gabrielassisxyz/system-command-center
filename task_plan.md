@@ -43,7 +43,7 @@
   temperature from an injectable sysfs root; every field absent-tolerant. — done when: a
   test pointing the reader at a fixture dir returns busy%/VRAM/temp, and a dir missing
   those files returns GPU fields absent with no crash.
-- [ ] Docker collector — list containers with per-container CPU % + RAM from the docker
+- [x] Docker collector — list containers with per-container CPU % + RAM from the docker
   client, grouped by the `com.docker.compose.project` label; unlabeled → "(ungrouped)";
   behind a `DockerSource` interface. — done when: a test with a fake source returns groups
   keyed by project with their containers, unlabeled containers under "(ungrouped)", and
@@ -51,7 +51,7 @@
 
 ## Phase 3 — Assembly & actions
 
-- [ ] Snapshot assembler — combine the system, per-process, GPU, and docker collectors into
+- [x] Snapshot assembler — combine the system, per-process, GPU, and docker collectors into
   one `Snapshot`; stateful, holding the previous sample so rates are computed on assembly.
   — done when: a test with all-fake sources produces a complete Snapshot, and a second call
   yields non-zero rates where counters advanced.
