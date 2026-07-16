@@ -55,7 +55,7 @@
   one `Snapshot`; stateful, holding the previous sample so rates are computed on assembly.
   — done when: a test with all-fake sources produces a complete Snapshot, and a second call
   yields non-zero rates where counters advanced.
-- [ ] Wire assembler into the SSE hub — replace the stub provider with the real assembler so
+- [x] Wire assembler into the SSE hub — replace the stub provider with the real assembler so
   collection runs on the hub tick only while clients are connected. — done when: an httptest
   client on `/events` receives a real Snapshot JSON frame (fakes injected) with header,
   processes, and docker groups all populated.
