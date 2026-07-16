@@ -59,7 +59,7 @@
   collection runs on the hub tick only while clients are connected. — done when: an httptest
   client on `/events` receives a real Snapshot JSON frame (fakes injected) with header,
   processes, and docker groups all populated.
-- [ ] Kill action endpoint — `POST /api/process/kill?pid=<n>` sends SIGTERM via an
+- [x] Kill action endpoint — `POST /api/process/kill?pid=<n>` sends SIGTERM via an
   injectable killer. — done when: an httptest POST invokes the killer with the parsed pid; a
   missing/bad pid returns 400; a killer error surfaces as a 5xx with a message, not a panic.
 - [ ] Docker stop/restart endpoints — `POST /api/container/stop` and

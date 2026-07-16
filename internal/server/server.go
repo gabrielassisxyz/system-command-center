@@ -17,23 +17,24 @@ func DefaultAddr() string {
 }
 
 // NewMux returns the HTTP handler for the live-usage web page.
-// It serves an embedded static page at "/", static assets under "/", and
-// live snapshots at "/events".
+// It serves an embedded static page at "/", static assets under "/",
+// live snapshots at "/events", and the process/container action endpoints.
 func NewMux(provider SnapshotProvider) *http.ServeMux {
 	hub := NewSSEHub(provider, 2*time.Second)
 	go hub.Run()
-	return newMux(hub)
+	return newMux(hub, OsProcessKiller{})
 }
 
 // NewMuxWithHub returns a mux using an already-created SSEHub.
 // Useful in tests to avoid starting the real ticker.
 func NewMuxWithHub(hub *SSEHub) *http.ServeMux {
-	return newMux(hub)
+	return newMux(hub, nilKiller{})
 }
 
-func newMux(hub *SSEHub) *http.ServeMux {
+func newMux(hub *SSEHub, killer ProcessKiller) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/events", hub)
+	mux.HandleFunc("/api/process/kill", killActionHandler(killer))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -46,3 +47,9 @@ func newMux(hub *SSEHub) *http.ServeMux {
 	mux.Handle("/", http.FileServer(http.FS(public)))
 	return mux
 }
+
+// nilKiller is a no-op ProcessKiller used when wiring tests that never hit
+// the action endpoints.
+type nilKiller struct{}
+
+func (nilKiller) Kill(int) error { return nil }
