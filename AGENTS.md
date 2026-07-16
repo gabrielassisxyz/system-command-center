@@ -54,4 +54,7 @@ Implement the top unchecked `task_plan.md` item, then append to `progress.md`.
   metric as absent, don't crash the view.
 - Docker stats need read access to the docker socket; run as a user in the `docker` group
   or container stats come back silently empty.
+- Docker `stats?stream=false` blocks ~1-2s per container (it samples CPU over one
+  interval). Fetch container stats concurrently, or the whole live snapshot freezes for
+  seconds×N-containers — the SSE frame only goes out after the full assembly returns.
 - (living section — append a line on every gotcha you hit)

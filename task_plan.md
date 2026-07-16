@@ -73,14 +73,14 @@
   header, the per-process list, and the Docker groups, each row showing its metric. — done
   when: loading the page against a running `/events` shows the header + both lists updating
   live (observed via `bin/dev`).
-- [ ] Sort control — heaviest-first, RAM by default, with a control toggling the per-row sort
+- [x] Sort control — heaviest-first, RAM by default, with a control toggling the per-row sort
   metric among RAM / CPU / disk I/O. — done when: the process list loads RAM-descending by
   default and re-sorts when the control changes (observed via `bin/dev`).
-- [ ] Action buttons — a kill button per process and stop/restart buttons per container,
+- [x] Action buttons — a kill button per process and stop/restart buttons per container,
   each calling its POST endpoint behind a confirmation. — done when: clicking kill POSTs the
   pid, clicking stop/restart POSTs the container id, and the row reflects the change on the
   next snapshot (observed via `bin/dev`).
-- [ ] `bin/dev` + end-to-end done-check — `bin/dev` runs the server; `bin/dev`/README note
+- [x] `bin/dev` + end-to-end done-check — `bin/dev` runs the server; `bin/dev`/README note
   the `sudo` requirement for complete per-process disk I/O. — done when: `bin/dev` starts the
   server on `127.0.0.1:8765`, opening it shows a live system header + per-program list +
   Docker-grouped list sorted by RAM by default (the IDEA done-check passes), and `bin/ci` is
