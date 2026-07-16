@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# bin/ci — the single gate. CI runs THIS exact script, so "green locally" == "green in CI".
+# format-check -> vet -> lint -> test -> vuln-scan. Non-zero on the first failure.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+echo "==> gofmt (format check)"
+unformatted="$(gofmt -l .)"
+if [ -n "$unformatted" ]; then
+  echo "gofmt: these files need formatting (run: gofmt -w .):" >&2
+  echo "$unformatted" >&2
+  exit 1
+fi
+
+echo "==> go vet"
+go vet ./...
+
+echo "==> golangci-lint"
+golangci-lint run ./...
+
+echo "==> go test"
+go test ./...
+
+echo "==> govulncheck"
+govulncheck ./...
+
+echo "OK — all gates green"

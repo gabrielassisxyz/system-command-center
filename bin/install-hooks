@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# bin/install-hooks — point git at the versioned .githooks/ dir. Run once after clone.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+git config core.hooksPath .githooks
+echo "hooksPath -> .githooks (pre-commit: gitleaks secret scan)"

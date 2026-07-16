@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Deterministic gate: stop a secret before it ever reaches a commit. Never disable.
+set -euo pipefail
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks not installed — a secret could leak. Install it; skipping is NOT safe." >&2
+  exit 1
+fi
+gitleaks protect --staged --redact --verbose

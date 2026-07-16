@@ -1,0 +1,11 @@
+# Build output
+/dist/
+*.out
+
+# Local env / secrets (keep the .example, ignore the real one)
+config/*.env
+!config/*.env.example
+.env
+
+# OS / editor cruft
+.DS_Store
