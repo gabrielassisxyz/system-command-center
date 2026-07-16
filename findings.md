@@ -16,5 +16,41 @@
 - Done-check: open the site, see live metrics of this desktop sorted by highest usage of
   the chosen metric (RAM default) — both the per-program list AND Docker containers
   grouped by compose stack, each showing its own usage.
+- v1 also includes (confirmed additions, see `SCOPE.md`): a **system-summary header**
+  (whole-machine CPU, RAM, disk & network I/O, temperature, AMD GPU), **per-process disk
+  I/O**, and **actions** — kill for processes (SIGTERM), stop/restart for containers.
+
+## Architecture (assumed by task_plan.md)
+
+- **Packages:** `internal/model` (Snapshot structs, the backend↔frontend contract),
+  `internal/metrics` (system + per-process collectors), `internal/gpu` (AMD sysfs reader),
+  `internal/docker` (container stats + compose grouping), one assembler that builds a
+  Snapshot, `internal/server` (http: static page, SSE, action endpoints), `cmd/<bin>`
+  wires it. Static page embedded via `embed`.
+- **Testability — wrap third-party libs behind thin interfaces this project owns**
+  (`SystemSource`, `ProcessSource`, `DockerSource`, a GPU sysfs root, an io-counter
+  source). Collectors take these as dependencies so tests inject fakes; no test touches
+  real hardware or the docker socket. This is the load-bearing reason collectors are split
+  the way they are in the plan.
+- **Rates need state.** Disk/network I/O and per-process disk I/O are cumulative counters;
+  rate = delta / deltaT across consecutive samples. The assembler is **stateful** — it
+  holds the previous sample and an injectable clock; the first sample yields zero rates.
+- **Collection is client-gated.** The SSE hub owns the ~2s ticker and only ticks (and thus
+  only collects) while ≥1 subscriber is connected — this is what keeps "nothing runs in the
+  background" true.
+- **Absent-tolerant everywhere.** Any missing metric (temps on some kernels, GPU files,
+  denied `/proc/<pid>/io`, docker down) is represented as absent in the model, never a
+  crash and never a fatal error for the whole snapshot.
+- **Metric placement (from the cost analysis):** per-process/per-container rows carry only
+  the metrics that are reliable per-pid — CPU, RAM, disk I/O. Temperature, network, and GPU
+  are system-level only and live in the header (per-process GPU/network are out of v1).
+- **Per-process disk I/O needs root** (`/proc/<pid>/io` is owner/privileged-only); run the
+  server with `sudo` for complete coverage, otherwise it's own-processes-only.
 
 ## Discoveries (appended by the loop)
+- SSE hub testability: production uses `SSEHub.Run()` with a real 2s ticker, but the hub exposes a manual `Tick()` method and `NewMuxWithHub()` so tests can drive broadcast frames deterministically without waiting on real time. `EmptyProvider` is the temporary stub until the assembler is wired.
+- `gopsutil` v4 split temperature sensors into a separate `sensors` package (`github.com/shirou/gopsutil/v4/sensors`) rather than `host.SensorsTemperatures()` from v3. The `SystemSource` interface uses `sensors.TemperatureStat`.
+- `cpu.PercentWithContext(ctx, 0, false)` with interval 0 uses gopsutil's internally cached previous sample, so the very first call on a fresh process may return 0; subsequent ticks while the server is running produce meaningful deltas.
+- System-level collection is intentionally absent-tolerant: `SystemCollector.Collect` returns a snapshot even if CPU, RAM, or temperature calls error. A source error only leaves that metric field empty.
+- Per-process disk I/O is implemented behind a project-owned `ProcIOSource` interface (`internal/metrics/procdisk.go`). `ProcessDiskIOCollector.Collect` takes the current pid list and returns a `map[int32]model.DiskIORate`; denied/missing reads are silently dropped per pid. Rate = delta / deltaT across consecutive samples; first sample yields absent rates. Counter resets (cur < prev) are guarded by returning absent for that direction so the UI never shows negative rates.
+- AMD GPU discovery is not hard-coded to `card0`; scan `/sys/class/drm/card*/device/vendor` for `0x1002` and read the matching `device/hwmon/hwmonN/name == "amdgpu"` `temp1_input`. The card/hwmon layout on this omarchy desktop is `card1` with `hwmon1`; `temp1_input` is in millidegrees and must be divided by 1000.
