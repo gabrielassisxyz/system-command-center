@@ -5,40 +5,419 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>hardware-usage</title>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 2rem; line-height: 1.4; }
-    h1 { font-size: 1.25rem; }
-    section { margin: 1.5rem 0; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.35rem 0.5rem; }
-    th { border-bottom: 1px solid; }
-    td.num { font-variant-numeric: tabular-nums; text-align: right; }
-    .section-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
-    .section-head h2 { margin: 0; }
-    .sort-control { font-size: 0.9rem; }
-    .btn { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.5rem; font-size: 0.85rem; line-height: 1; border: 1px solid; border-radius: 0.25rem; background: transparent; cursor: pointer; }
-    .btn:hover { background: rgba(128,128,128,0.15); }
-    .btn-row { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+    /* Design tokens transcribed from docs/reference-design.html. The reference
+       pulls Tailwind + Geist from a CDN; this is a loopback-only tool that must
+       work with no network, so the palette lives here as custom properties and
+       the type stack falls back to the OS fonts. */
+    :root {
+      --background: #0c1324;
+      --surface-container-lowest: #070d1f;
+      --surface-container-low: #151b2d;
+      --surface-container: #191f31;
+      --surface-container-high: #23293c;
+      --surface-variant: #2e3447;
+      --surface-dim: #0c1324;
+      --on-surface: #dce1fb;
+      --on-surface-variant: #bacac5;
+      --outline: #859490;
+      --outline-variant: #3c4a46;
+      --primary: #ead0ff;
+      --primary-container: #d4aff9;
+      --tertiary: #ffd1aa;
+      --error: #ffb4ab;
+
+      --radius: 0.125rem;
+      --radius-lg: 0.25rem;
+      --radius-xl: 0.5rem;
+      --gutter: 16px;
+
+      color-scheme: dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--background);
+      color: var(--on-surface);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ---- top bar ---------------------------------------------------- */
+
+    .topbar {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--gutter);
+      height: 56px;
+      padding: 0 var(--gutter);
+      background: color-mix(in srgb, var(--background) 70%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--outline-variant);
+    }
+
+    .brand {
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 500;
+      color: var(--on-surface);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+      padding: 0.4rem 0.6rem;
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--outline);
+    }
+
+    .status[data-state="live"] { color: var(--primary); }
+    .status[data-state="live"]::before { background: var(--primary); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    .status[data-state="lost"] { color: var(--error); }
+    .status[data-state="lost"]::before { background: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    main {
+      padding: calc(56px + var(--gutter)) var(--gutter) var(--gutter);
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* ---- system metric cards ---------------------------------------- */
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--gutter);
+      margin-bottom: 2rem;
+    }
+
+    @media (min-width: 768px) {
+      .metric-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    }
+
+    .card {
+      background: var(--surface-container-low);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+    }
+
+    .card-label {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+    }
+
+    .card-value {
+      margin-top: 0.5rem;
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 500;
+      color: var(--primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card-sub {
+      margin-top: 0.25rem;
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .meter {
+      display: flex;
+      gap: 4px;
+      margin-top: 0.75rem;
+    }
+
+    .meter span {
+      height: 4px;
+      flex: 1;
+      background: var(--outline-variant);
+    }
+
+    .meter span.on { background: var(--primary); }
+    .meter span.half { background: var(--primary); opacity: 0.5; }
+
+    /* ---- panels ------------------------------------------------------ */
+
+    .panel {
+      background: var(--surface-container-low);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 1rem;
+      border-bottom: 1px solid var(--outline-variant);
+      background: color-mix(in srgb, var(--surface-container) 50%, transparent);
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 500;
+      color: var(--on-surface);
+    }
+
+    .panel-body { overflow-x: auto; }
+
+    .panel-empty {
+      margin: 0;
+      padding: 1rem;
+      color: var(--on-surface-variant);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    thead {
+      background: color-mix(in srgb, var(--surface-container) 30%, transparent);
+      border-bottom: 1px solid var(--outline-variant);
+    }
+
+    th {
+      padding: 0.5rem 1rem;
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.5rem 1rem;
+      color: var(--on-surface-variant);
+      vertical-align: middle;
+    }
+
+    tbody tr { border-top: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent); }
+    tbody tr:hover { background: var(--surface-container-high); }
+    tbody tr:first-child { border-top: 0; }
+
+    .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .accent { color: var(--primary); }
+
+    /* ---- docker stacks ----------------------------------------------- */
+
+    .stack-row { cursor: pointer; }
+    .stack-row td:first-child { color: var(--primary); }
+
+    .stack-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .caret {
+      display: inline-block;
+      width: 1em;
+      color: var(--on-surface-variant);
+      transition: transform 150ms;
+    }
+
+    .stack-row[aria-expanded="false"] .caret { transform: rotate(-90deg); }
+
+    .dots {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .dots i {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--primary);
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    .container-row { background: color-mix(in srgb, var(--surface-dim) 30%, transparent); }
+    .container-row[hidden] { display: none; }
+
+    .container-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding-left: 1.5rem;
+    }
+
+    .container-name::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--primary);
+      flex: none;
+    }
+
+    .container-id {
+      color: var(--outline);
+      font-size: 12px;
+    }
+
+    /* ---- processes --------------------------------------------------- */
+
+    .proc-name {
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--on-surface);
+    }
+
+    .ram-cell {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
+    .bar {
+      width: 64px;
+      height: 4px;
+      background: var(--outline-variant);
+      border-radius: 999px;
+      overflow: hidden;
+      flex: none;
+    }
+
+    @media (max-width: 640px) { .bar { display: none; } }
+
+    .bar i {
+      display: block;
+      height: 100%;
+      background: var(--primary);
+    }
+
+    /* ---- controls ---------------------------------------------------- */
+
+    .sort-control {
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .sort-control select {
+      font: inherit;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--on-surface);
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+      padding: 0.25rem 0.5rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      font: inherit;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--on-surface-variant);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--surface-variant) 30%, transparent);
+    }
+
+    .btn-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
     /* Confirm spans are hidden until their action's row class is set. The yes/no
        buttons live inside the confirm span, so we hide only the top-level action
        buttons via the direct-child combinator (>) — a descendant rule would also
        hide the nested yes/no and leave an unclickable confirmation. */
-    .confirm { display: none; }
+    .confirm { display: none; color: var(--tertiary); border-color: var(--tertiary); }
     .confirming > .kill { display: none; }
     .confirming > .confirm { display: inline-flex; }
     .confirming-stop > .stop, .confirming-stop > .restart,
     .confirming-restart > .stop, .confirming-restart > .restart { display: none; }
     .confirming-stop > .confirm-stop { display: inline-flex; }
     .confirming-restart > .confirm-restart { display: inline-flex; }
-    .confirm .yes { border-color: currentColor; }
+    .confirm .yes { border-color: currentColor; color: inherit; }
     .confirm .no { border-color: transparent; }
   </style>
 </head>
 <body>
-  <h1>hardware-usage</h1>
-  <section id="system">Connecting…</section>
-  <section id="processes"></section>
-  <section id="docker"></section>
+  <header class="topbar">
+    <span class="brand">hardware-usage</span>
+    <span class="status" id="status">Connecting…</span>
+  </header>
+  <main>
+    <section class="metric-grid" id="system"></section>
+    <section id="docker"></section>
+    <section id="processes"></section>
+  </main>
   <template id="process-sort-control">
     <label class="sort-control">Sort by
       <select data-sort-select>
