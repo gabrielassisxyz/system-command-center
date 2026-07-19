@@ -170,6 +170,9 @@ func TestAssemblerBuildsCompleteSnapshot(t *testing.T) {
 	a := newTestAssembler(t, tc, sys, io, procs, procIO, g, dc)
 	a.clock = tc
 
+	// Docker is served from a background-refreshed cache; prime it so Collect
+	// sees the fake source's containers rather than an empty cache.
+	a.RefreshDocker(context.Background())
 	snap := a.Collect(context.Background())
 
 	if got := *snap.System.CPU; got != 25.0 {

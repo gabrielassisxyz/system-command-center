@@ -5,6 +5,7 @@ package assembler
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"hardware-usage/internal/docker"
@@ -38,6 +39,15 @@ type Assembler struct {
 	gpu        GPUReader
 	docker     *docker.DockerCollector
 	clock      Clock
+
+	// collectMu serializes Collect so the SSE tick and the on-connect replay can
+	// both call it without racing the diff-based collectors' previous-sample state.
+	collectMu sync.Mutex
+
+	// Docker stats block ~1-2s per container, so they are fetched off the Collect
+	// path by RunDockerRefresh and read from this cache instantly instead.
+	dockerMu    sync.RWMutex
+	dockerCache []model.ComposeGroup
 }
 
 // NewWithClock builds an Assembler with an explicit clock. Tests use this to
@@ -97,6 +107,9 @@ func New(
 // call from the SSE hub's broadcast tick. The first call always yields zero
 // (or absent) rates because there is no previous sample.
 func (a *Assembler) Collect(ctx context.Context) model.Snapshot {
+	a.collectMu.Lock()
+	defer a.collectMu.Unlock()
+
 	var snap model.Snapshot
 
 	snap.System = a.system.Collect(ctx)
@@ -128,9 +141,44 @@ func (a *Assembler) Collect(ctx context.Context) model.Snapshot {
 		}
 	}
 
-	snap.Docker = a.docker.Collect(ctx)
+	snap.Docker = a.cachedDocker()
 
 	return snap
+}
+
+// cachedDocker returns the most recently refreshed Docker grouping without
+// blocking. Fetching stats here would stall every SSE frame by ~1-2s per
+// container; RunDockerRefresh keeps this cache warm in the background instead.
+func (a *Assembler) cachedDocker() []model.ComposeGroup {
+	a.dockerMu.RLock()
+	defer a.dockerMu.RUnlock()
+	return a.dockerCache
+}
+
+// RefreshDocker fetches container stats synchronously and stores them for the
+// next Collect. It is the one place that pays the Docker stats latency.
+func (a *Assembler) RefreshDocker(ctx context.Context) {
+	groups := a.docker.Collect(ctx)
+	a.dockerMu.Lock()
+	a.dockerCache = groups
+	a.dockerMu.Unlock()
+}
+
+// RunDockerRefresh primes the Docker cache once, then refreshes it on every
+// interval tick until ctx is cancelled. Run it in its own goroutine: the SSE
+// broadcast reads the cache instantly while this loop absorbs the stats latency.
+func (a *Assembler) RunDockerRefresh(ctx context.Context, interval time.Duration) {
+	a.RefreshDocker(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.RefreshDocker(ctx)
+		}
+	}
 }
 
 // Snapshot returns the most recently assembled snapshot. It satisfies the
