@@ -1,51 +1,23 @@
 # findings.md — hardware-usage
 
-> Durable memory across loop iterations. Each fresh agent reads this first.
-> Start with the load-bearing decisions; iterations append discoveries below.
+> Durable memory across loop iterations. Each fresh agent reads this first. Start with the load-bearing decisions; iterations append discoveries below.
 
 ## Decisions (from IDEA.md / SCOPE.md)
-- WHAT: live, local-only web page showing this desktop's resource usage — a per-process
-  list + Docker containers grouped by their compose stack, pushed live to the browser,
-  sorted by a chosen metric (RAM default).
-- Anti-goal: NOT a monitoring/observability platform, NOT multi-user, NOT a 24/7 daemon.
-  v1 keeps NO history — no background collector, no storage, no time-series (deferred v2).
-- Stack / storage: **Go 1.26** (stdlib `net/http` + SSE), `gopsutil` for system/process
-  metrics, official `docker/docker` client grouped by `com.docker.compose.project`.
-  Frontend: one static HTML page + vanilla JS, no build step. Storage: none (live-only).
-  Server binds loopback only. Tier 2.
-- Done-check: open the site, see live metrics of this desktop sorted by highest usage of
-  the chosen metric (RAM default) — both the per-program list AND Docker containers
-  grouped by compose stack, each showing its own usage.
-- v1 also includes (confirmed additions, see `SCOPE.md`): a **system-summary header**
-  (whole-machine CPU, RAM, disk & network I/O, temperature, AMD GPU), **per-process disk
-  I/O**, and **actions** — kill for processes (SIGTERM), stop/restart for containers.
+- WHAT: live, local-only web page showing this desktop's resource usage — a per-process list + Docker containers grouped by their compose stack, pushed live to the browser, sorted by a chosen metric (RAM default).
+- Anti-goal: NOT a monitoring/observability platform, NOT multi-user, NOT a 24/7 daemon. v1 keeps NO history — no background collector, no storage, no time-series (deferred v2).
+- Stack / storage: **Go 1.26** (stdlib `net/http` + SSE), `gopsutil` for system/process metrics, official `docker/docker` client grouped by `com.docker.compose.project`. Frontend: one static HTML page + vanilla JS, no build step. Storage: none (live-only). Server binds loopback only. Tier 2.
+- Done-check: open the site, see live metrics of this desktop sorted by highest usage of the chosen metric (RAM default) — both the per-program list AND Docker containers grouped by compose stack, each showing its own usage.
+- v1 also includes (confirmed additions, see `SCOPE.md`): a **system-summary header** (whole-machine CPU, RAM, disk & network I/O, temperature, AMD GPU), **per-process disk I/O**, and **actions** — kill for processes (SIGTERM), stop/restart for containers.
 
 ## Architecture (assumed by task_plan.md)
 
-- **Packages:** `internal/model` (Snapshot structs, the backend↔frontend contract),
-  `internal/metrics` (system + per-process collectors), `internal/gpu` (AMD sysfs reader),
-  `internal/docker` (container stats + compose grouping), one assembler that builds a
-  Snapshot, `internal/server` (http: static page, SSE, action endpoints), `cmd/<bin>`
-  wires it. Static page embedded via `embed`.
-- **Testability — wrap third-party libs behind thin interfaces this project owns**
-  (`SystemSource`, `ProcessSource`, `DockerSource`, a GPU sysfs root, an io-counter
-  source). Collectors take these as dependencies so tests inject fakes; no test touches
-  real hardware or the docker socket. This is the load-bearing reason collectors are split
-  the way they are in the plan.
-- **Rates need state.** Disk/network I/O and per-process disk I/O are cumulative counters;
-  rate = delta / deltaT across consecutive samples. The assembler is **stateful** — it
-  holds the previous sample and an injectable clock; the first sample yields zero rates.
-- **Collection is client-gated.** The SSE hub owns the ~2s ticker and only ticks (and thus
-  only collects) while ≥1 subscriber is connected — this is what keeps "nothing runs in the
-  background" true.
-- **Absent-tolerant everywhere.** Any missing metric (temps on some kernels, GPU files,
-  denied `/proc/<pid>/io`, docker down) is represented as absent in the model, never a
-  crash and never a fatal error for the whole snapshot.
-- **Metric placement (from the cost analysis):** per-process/per-container rows carry only
-  the metrics that are reliable per-pid — CPU, RAM, disk I/O. Temperature, network, and GPU
-  are system-level only and live in the header (per-process GPU/network are out of v1).
-- **Per-process disk I/O needs root** (`/proc/<pid>/io` is owner/privileged-only); run the
-  server with `sudo` for complete coverage, otherwise it's own-processes-only.
+- **Packages:** `internal/model` (Snapshot structs, the backend↔frontend contract), `internal/metrics` (system + per-process collectors), `internal/gpu` (AMD sysfs reader), `internal/docker` (container stats + compose grouping), one assembler that builds a Snapshot, `internal/server` (http: static page, SSE, action endpoints), `cmd/<bin>` wires it. Static page embedded via `embed`.
+- **Testability — wrap third-party libs behind thin interfaces this project owns** (`SystemSource`, `ProcessSource`, `DockerSource`, a GPU sysfs root, an io-counter source). Collectors take these as dependencies so tests inject fakes; no test touches real hardware or the docker socket. This is the load-bearing reason collectors are split the way they are in the plan.
+- **Rates need state.** Disk/network I/O and per-process disk I/O are cumulative counters; rate = delta / deltaT across consecutive samples. The assembler is **stateful** — it holds the previous sample and an injectable clock; the first sample yields zero rates.
+- **Collection is client-gated.** The SSE hub owns the ~2s ticker and only ticks (and thus only collects) while ≥1 subscriber is connected — this is what keeps "nothing runs in the background" true.
+- **Absent-tolerant everywhere.** Any missing metric (temps on some kernels, GPU files, denied `/proc/<pid>/io`, docker down) is represented as absent in the model, never a crash and never a fatal error for the whole snapshot.
+- **Metric placement (from the cost analysis):** per-process/per-container rows carry only the metrics that are reliable per-pid — CPU, RAM, disk I/O. Temperature, network, and GPU are system-level only and live in the header (per-process GPU/network are out of v1).
+- **Per-process disk I/O needs root** (`/proc/<pid>/io` is owner/privileged-only); run the server with `sudo` for complete coverage, otherwise it's own-processes-only.
 
 ## Discoveries (appended by the loop)
 - SSE hub testability: production uses `SSEHub.Run()` with a real 2s ticker, but the hub exposes a manual `Tick()` method and `NewMuxWithHub()` so tests can drive broadcast frames deterministically without waiting on real time. `EmptyProvider` is the temporary stub until the assembler is wired.
