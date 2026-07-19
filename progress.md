@@ -1,5 +1,4 @@
-> One line per completed task, appended by the loop. This is the trajectory log —
-> "why did it do that on iteration 7?" is answered here.
+> One line per completed task, appended by the loop. This is the trajectory log — "why did it do that on iteration 7?" is answered here.
 
 - Snapshot data model — created `internal/model` with Snapshot, SystemSnapshot, ProcessRow, ContainerRow, ComposeGroup, and pointer-based metric structs; tests verify fully-populated and metrics-absent JSON serialization; `bin/ci` green.
 - Loopback HTTP server + embedded static page — created `internal/server/static/index.html` and `app.js`, wired `embed` in `NewMux`, added `DefaultAddr`, and updated `cmd/hardware-usage/main.go` to default to `server.DefaultAddr()`; tests verify `GET /` returns the HTML body and the default address is `127.0.0.1:8765`; `bin/ci` green.
