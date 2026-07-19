@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 # bin/dev — run the live-usage server locally (loopback only). Ctrl-C to stop.
+#
+# Per-process disk I/O reads /proc/<pid>/io, which the kernel restricts to the
+# process owner. Run unprivileged and you get disk I/O for your own processes
+# only; run `sudo bin/dev` for complete per-process disk I/O across the machine.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "note: running unprivileged — per-process disk I/O is limited to your own" >&2
+  echo "      processes. For machine-wide disk I/O, run: sudo bin/dev" >&2
+fi
+
 exec go run ./cmd/hardware-usage
