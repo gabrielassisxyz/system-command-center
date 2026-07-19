@@ -212,8 +212,8 @@
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      font-size: 13px;
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.5;
     }
 
     thead {
@@ -222,7 +222,7 @@
     }
 
     th {
-      padding: 0.5rem 1rem;
+      padding: 0.45rem 0.625rem;
       font-size: 12px;
       line-height: 1;
       letter-spacing: 0.05em;
@@ -233,7 +233,7 @@
     }
 
     td {
-      padding: 0.5rem 1rem;
+      padding: 0.45rem 0.625rem;
       color: var(--on-surface-variant);
       vertical-align: middle;
     }
@@ -311,11 +311,24 @@
     /* ---- processes --------------------------------------------------- */
 
     .proc-name {
-      max-width: 320px;
+      max-width: 520px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--on-surface);
+    }
+
+    /* The identifying label (Chromium role, script, PostgreSQL backend title,
+       working directory) sits quieter than the program name it qualifies, and
+       truncates with the name rather than widening the column. */
+    .proc-detail {
+      color: var(--outline);
+      font-size: 12px;
+    }
+
+    .proc-detail::before {
+      content: "·";
+      margin: 0 0.4em;
     }
 
     .ram-cell {
@@ -340,6 +353,38 @@
       display: block;
       height: 100%;
       background: var(--primary);
+    }
+
+    /* A repeated program (68 browser helpers, say) collapses to one aggregate
+       row that expands to its individual PIDs — the same fold affordance the
+       Docker stacks use, so the two lists read the same way. */
+    .proc-group-row { cursor: pointer; }
+    .proc-group-row td:first-child { color: var(--on-surface); }
+
+    .proc-group-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .proc-group-row[aria-expanded="false"] .caret { transform: rotate(-90deg); }
+
+    .proc-count {
+      color: var(--on-surface-variant);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .proc-child-row { background: color-mix(in srgb, var(--surface-dim) 30%, transparent); }
+    .proc-child-row[hidden] { display: none; }
+
+    .proc-child-name {
+      padding-left: 1.5rem;
+      max-width: 520px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--on-surface-variant);
     }
 
     /* ---- controls ---------------------------------------------------- */
@@ -393,19 +438,26 @@
       flex-wrap: wrap;
     }
 
-    /* Confirm spans are hidden until their action's row class is set. The yes/no
-       buttons live inside the confirm span, so we hide only the top-level action
-       buttons via the direct-child combinator (>) — a descendant rule would also
-       hide the nested yes/no and leave an unclickable confirmation. */
+    /* The kill confirm span is hidden until the row's confirming class is set.
+       The yes/no buttons live inside the confirm span, so we hide only the
+       top-level kill button via the direct-child combinator (>) — a descendant
+       rule would also hide the nested yes/no and leave an unclickable prompt.
+       Container stop/restart are reversible and fire without this step. */
     .confirm { display: none; color: var(--tertiary); border-color: var(--tertiary); }
     .confirming > .kill { display: none; }
     .confirming > .confirm { display: inline-flex; }
-    .confirming-stop > .stop, .confirming-stop > .restart,
-    .confirming-restart > .stop, .confirming-restart > .restart { display: none; }
-    .confirming-stop > .confirm-stop { display: inline-flex; }
-    .confirming-restart > .confirm-restart { display: inline-flex; }
     .confirm .yes { border-color: currentColor; color: inherit; }
     .confirm .no { border-color: transparent; }
+
+    /* Optimistic action feedback: a stop/restart request replaces the buttons
+       with this label until the container's next state arrives over SSE. */
+    .btn-status {
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      font-style: italic;
+      color: var(--tertiary);
+    }
   </style>
 </head>
 <body>

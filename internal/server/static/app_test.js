@@ -147,6 +147,39 @@ assertContains('renderDocker stop button', dom.docker.innerHTML, 'data-container
 assertContains('renderDocker restart button', dom.docker.innerHTML, 'data-container-restart="c1"');
 // The stack row aggregates its containers rather than repeating a single one.
 assertContains('renderDocker stack aggregate ram', dom.docker.innerHTML, '128.0 MB');
+// Each stack carries a stop-all control seeded with its container ids.
+assertContains('renderDocker stop all', dom.docker.innerHTML, 'data-stack-stop="c1"');
+
+// Processes that share a name collapse into one aggregate row with a toggle,
+// mirroring the Docker stacks; a program that runs once stays a plain row.
+helpers.renderProcesses([
+  { pid: 10, name: 'brave', cpu: 5, ram: { used: 200 } },
+  { pid: 11, name: 'brave', cpu: 3, ram: { used: 100 } },
+  { pid: 12, name: 'solo', cpu: 1, ram: { used: 50 } },
+], 'ram');
+assertContains('renderProcesses group row', dom.processes.innerHTML, 'proc-group-row');
+assertContains('renderProcesses group count', dom.processes.innerHTML, '×2');
+assertContains('renderProcesses group aggregate ram', dom.processes.innerHTML, '300 B');
+assertContains('renderProcesses group children linked', dom.processes.innerHTML, 'data-proc-parent="0"');
+assertContains('renderProcesses group child hidden by default', dom.processes.innerHTML, 'data-proc-parent="0" data-pid="10" hidden');
+assertContains('renderProcesses singleton row', dom.processes.innerHTML, 'data-pid="12"');
+
+// The server-derived detail is what tells same-named siblings apart, so it has
+// to survive onto both the grouped children and the plain rows.
+helpers.renderProcesses([
+  { pid: 20, name: 'brave', detail: 'renderer', cpu: 4, ram: { used: 300 } },
+  { pid: 21, name: 'brave', detail: 'GPU', cpu: 2, ram: { used: 200 } },
+  { pid: 22, name: 'postgres', detail: 'appuser appdb 10.0.0.5(54321) idle', cpu: 1, ram: { used: 90 } },
+  { pid: 23, name: 'kthreadd', cpu: 0, ram: { used: 10 } },
+], 'ram');
+assertContains('detail on grouped child', dom.processes.innerHTML, '<span class="proc-detail">renderer</span>');
+assertContains('detail on second child', dom.processes.innerHTML, '<span class="proc-detail">GPU</span>');
+assertContains('detail on singleton row', dom.processes.innerHTML, 'appuser appdb 10.0.0.5(54321) idle');
+// A process with nothing to add must not render an empty separator.
+if (dom.processes.innerHTML.includes('<span class="proc-detail"></span>')) {
+  failures++;
+  console.error('FAIL empty detail should render no span');
+}
 
 const killBtn = helpers.killButton(123);
 assertContains('killButton has pid', killBtn, 'data-kill-pid="123"');
@@ -155,14 +188,17 @@ assertContains('killButton confirms', killBtn, 'kill 123?');
 const containerBtn = helpers.containerButtons('abc123');
 assertContains('containerButtons stop', containerBtn, 'data-container-stop="abc123"');
 assertContains('containerButtons restart', containerBtn, 'data-container-restart="abc123"');
-assertContains('containerButtons stop confirm', containerBtn, 'stop abc123?');
-assertContains('containerButtons restart confirm', containerBtn, 'restart abc123?');
+// Stop/restart fire on the first click — no confirmation step.
+if (containerBtn.includes('data-container-stop-yes') || containerBtn.includes('confirm')) {
+  failures++;
+  console.error('FAIL containerButtons has no confirm:\n  got: ' + containerBtn);
+}
 
 // A full 64-char id must reach the action endpoints intact but never be shown.
 const longID = '0123456789abcdef'.repeat(4);
 const longBtn = helpers.containerButtons(longID);
 assertContains('containerButtons keeps full id', longBtn, 'data-container-stop="' + longID + '"');
-assertContains('containerButtons shows short id', longBtn, 'stop 0123456789ab? ');
+assertContains('containerButtons shows short id in title', longBtn, 'Stop container 0123456789ab"');
 
 const byCpu = helpers.sortProcesses([
   { pid: 1, cpu: 5, ram: { used: 100 } },
