@@ -50,9 +50,16 @@ type SystemSnapshot struct {
 }
 
 // ProcessRow is one entry in the per-process list.
+//
+// Detail is a short label distinguishing this process from its same-named
+// siblings (a Chromium role, a script name, a PostgreSQL backend title, a
+// working directory). It is derived server-side rather than shipping the raw
+// command line, which runs to ~1.5 KB per Chromium process and would add
+// megabytes to every frame.
 type ProcessRow struct {
 	PID    int32       `json:"pid"`
 	Name   string      `json:"name"`
+	Detail string      `json:"detail,omitempty"`
 	CPU    *float64    `json:"cpu,omitempty"`
 	RAM    *RAMInfo    `json:"ram,omitempty"`
 	DiskIO *DiskIORate `json:"disk_io,omitempty"`

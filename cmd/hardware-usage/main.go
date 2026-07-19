@@ -2,9 +2,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"hardware-usage/internal/assembler"
 	"hardware-usage/internal/docker"
@@ -13,6 +15,11 @@ import (
 	"hardware-usage/internal/server"
 )
 
+// dockerRefreshInterval is how often container stats are re-sampled in the
+// background. It matches the SSE broadcast cadence so the Docker figures stay
+// roughly as fresh as the rest of the snapshot without hammering the daemon.
+const dockerRefreshInterval = 2 * time.Second
+
 func main() {
 	// Build the real assembler backed by production sources. Each source is
 	// wrapped behind a thin project-owned interface so tests can inject fakes.
@@ -20,6 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Keep Docker stats warm off the request path so the SSE snapshot never
+	// blocks on the daemon; without this the first frame waits seconds for every
+	// container's stats to be sampled.
+	go provider.RunDockerRefresh(context.Background(), dockerRefreshInterval)
 
 	// Loopback by default: this is a local tool for one machine, not a network service.
 	addr := defaultAddr()

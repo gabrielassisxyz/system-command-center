@@ -30,6 +30,7 @@ type SSEHub struct {
 
 	mu      sync.RWMutex
 	clients map[chan string]struct{}
+	last    string // most recent broadcast frame, replayed to each new client
 }
 
 // NewSSEHub creates a hub that will broadcast at interval.
@@ -61,7 +62,11 @@ func (h *SSEHub) Tick() {
 	if err != nil {
 		return
 	}
-	h.broadcast(string(data))
+	msg := string(data)
+	h.mu.Lock()
+	h.last = msg
+	h.mu.Unlock()
+	h.broadcast(msg)
 }
 
 func (h *SSEHub) hasClients() bool {
@@ -118,6 +123,17 @@ func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send an initial comment so the client knows the connection is live.
 	_, _ = fmt.Fprint(w, ":ok\n\n")
 	flusher.Flush()
+
+	// Replay the most recent frame so the page paints immediately instead of
+	// waiting up to one broadcast interval for the next tick. This reuses the
+	// cached snapshot, so it never re-hits the collectors.
+	h.mu.RLock()
+	last := h.last
+	h.mu.RUnlock()
+	if last != "" {
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", last)
+		flusher.Flush()
+	}
 
 	for {
 		select {

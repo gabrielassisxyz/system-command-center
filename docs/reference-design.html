@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard - omarchy</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {error: "#ffb4ab", "on-primary": "#402060", "on-tertiary-fixed": "#2d1600", "surface-variant": "#2e3447", "surface-tint": "#dcb8ff", background: "#0c1324", "on-error-container": "#ffdad6", "on-tertiary-container": "#744000", "error-container": "#93000a", "on-secondary-container": "#b6b9bb", "inverse-on-surface": "#2a3043", "on-secondary-fixed-variant": "#444749", outline: "#859490", "tertiary-fixed-dim": "#ffb875", "inverse-primary": "#715092", "secondary-fixed-dim": "#c4c7c9", "tertiary-container": "#ffac5a", "tertiary-fixed": "#ffdcc0", tertiary: "#ffd1aa", surface: "#0c1324", "on-primary-container": "#5e3e7f", "surface-container-high": "#23293c", "inverse-surface": "#dce1fb", "primary-container": "#d4aff9", "primary-fixed": "#f0dbff", "surface-container-low": "#151b2d", "surface-bright": "#33394c", "surface-container-lowest": "#070d1f", "on-tertiary": "#4b2800", "surface-dim": "#0c1324", "primary-fixed-dim": "#dcb8ff", "surface-container": "#191f31", "on-background": "#dce1fb", "on-tertiary-fixed-variant": "#6b3b00", "surface-container-highest": "#2e3447", "secondary-fixed": "#e0e3e5", "on-secondary-fixed": "#191c1e", "secondary-container": "#464a4b", primary: "#ead0ff", "on-surface-variant": "#bacac5", "on-primary-fixed-variant": "#583879", "on-error": "#690005", "on-primary-fixed": "#2a064a", secondary: "#c4c7c9", "on-secondary": "#2d3133", "outline-variant": "#3c4a46", "on-surface": "#dce1fb"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {unit: "4px", "margin-mobile": "16px", gutter: "16px", "margin-desktop": "32px", "max-width": "1280px"}, fontFamily: {"headline-lg": ["Geist"], "headline-md": ["Geist"], "mono-code": ["Geist"], "body-md": ["Geist"], "headline-lg-mobile": ["Geist"], "body-lg": ["Geist"], "label-md": ["Geist"], headline: ["Geist"], display: ["Geist"], body: ["Geist"], label: ["Geist"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600"}], "headline-md": ["20px", {lineHeight: "1.4", fontWeight: "500"}], "mono-code": ["13px", {lineHeight: "1.6", fontWeight: "400"}], "body-md": ["14px", {lineHeight: "1.5", fontWeight: "400"}], "headline-lg-mobile": ["24px", {lineHeight: "1.2", fontWeight: "600"}], "body-lg": ["16px", {lineHeight: "1.6", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "1", letterSpacing: "0.05em", fontWeight: "500"}]}}}};</script>
+<style>
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .4; }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-gutter h-14 bg-surface/70 backdrop-blur-md border-b border-outline-variant flat no shadows">
+<div class="flex items-center gap-4">
+<div class="hidden md:flex items-center gap-1">
+<a class="text-on-surface-variant font-medium hover:text-primary hover:bg-surface-variant/30 transition-colors px-3 py-1 rounded" href="#">Cluster</a>
+<a class="text-on-surface-variant font-medium hover:text-primary hover:bg-surface-variant/30 transition-colors px-3 py-1 rounded" href="#">Containers</a>
+<a class="text-primary border-b-2 border-primary font-bold hover:text-primary hover:bg-surface-variant/30 transition-colors px-3 py-1 rounded opacity-80 duration-150" href="#">Processes</a>
+<a class="text-on-surface-variant font-medium hover:text-primary hover:bg-surface-variant/30 transition-colors px-3 py-1 rounded" href="#">Network</a>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="pt-[72px] p-gutter max-w-[1600px] mx-auto min-h-screen">
+<!-- System Resources Grid -->
+<section class="grid grid-cols-2 md:grid-cols-5 gap-gutter mb-8">
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 backdrop-blur-md">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase">CPU</h3>
+<div class="font-headline-md text-headline-md text-primary mt-2">42%</div>
+<div class="flex gap-1 mt-3">
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1 opacity-50"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 backdrop-blur-md">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase">RAM</h3>
+<div class="font-headline-md text-headline-md text-primary mt-2">16.4 GB</div>
+<div class="flex gap-1 mt-3">
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1 opacity-50"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 backdrop-blur-md">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase">Swap</h3>
+<div class="font-headline-md text-headline-md text-primary mt-2">1.2 GB</div>
+<div class="flex gap-1 mt-3">
+<div class="h-1 bg-primary flex-1 opacity-50"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 backdrop-blur-md">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase">Disk</h3>
+<div class="font-headline-md text-headline-md text-primary mt-2">452 GB</div>
+<div class="flex gap-1 mt-3">
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1 opacity-50"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 backdrop-blur-md">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase">Temp</h3>
+<div class="font-headline-md text-headline-md text-primary mt-2">68°C</div>
+<div class="flex gap-1 mt-3">
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-primary flex-1"></div>
+<div class="h-1 bg-outline-variant flex-1"></div>
+</div>
+</div>
+</section>
+<!-- Two Columns -->
+<div class="grid grid-cols-1 gap-6">
+<!-- Docker Stacks -->
+<section class="bg-surface-container-low border border-outline-variant rounded-lg flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container/50">
+<h3 class="font-headline-md text-headline-md text-on-surface">Docker Stacks</h3>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-mono-code text-mono-code">
+<thead class="bg-surface-container/30 border-b border-outline-variant">
+<tr>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-medium">Stack / Container</th>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-medium">State</th>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-medium">CPU</th>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-bold text-right">RAM (MB)</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/50">
+<!-- Parent Row -->
+<tr class="hover:bg-surface-container-high transition-colors cursor-pointer group">
+<td class="px-4 py-2 flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+                                monitoring-stack
+                            </td>
+<td class="px-4 py-2">
+<div class="flex gap-1 items-center">
+<span class="w-2 h-2 rounded-full bg-primary pulse"></span>
+<span class="w-2 h-2 rounded-full bg-primary pulse"></span>
+</div>
+</td>
+<td class="px-4 py-2 text-primary">5%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right">640</td>
+</tr>
+<!-- Child Rows -->
+<tr class="bg-surface-dim/30 hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-2 pl-10 flex items-center gap-2 text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                                prometheus
+                            </td>
+<td class="px-4 py-2 text-on-surface-variant">Up</td>
+<td class="px-4 py-2 text-primary">4%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right">512</td>
+</tr>
+<tr class="bg-surface-dim/30 hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-2 pl-10 flex items-center gap-2 text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                                grafana
+                            </td>
+<td class="px-4 py-2 text-on-surface-variant">Up</td>
+<td class="px-4 py-2 text-primary">1%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right">128</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Programs & Processes -->
+<section class="bg-surface-container-low border border-outline-variant rounded-lg flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container/50">
+<h3 class="font-headline-md text-headline-md text-on-surface">Programs &amp; Processes</h3>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-mono-code text-mono-code">
+<thead class="bg-surface-container/30 border-b border-outline-variant">
+<tr>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-medium">Process</th>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-medium">CPU</th>
+<th class="px-4 py-2 font-label-md text-on-surface-variant font-bold text-right">RAM <span class="material-symbols-outlined text-[14px] align-middle" data-icon="arrow_drop_down">arrow_drop_down</span></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/50">
+<!-- Parent Row -->
+<tr class="hover:bg-surface-container-high transition-colors cursor-pointer group">
+<td class="px-4 py-2 flex items-center gap-2 text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors text-[20px]" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+                                Firefox
+                            </td>
+<td class="px-4 py-2 text-primary">12%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right">2.4 GB</td>
+</tr>
+<!-- Child Rows -->
+<tr class="bg-surface-dim/30 hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-2 pl-10 text-on-surface-variant flex items-center">
+<div class="truncate max-w-[200px]">Web Content</div>
+</td>
+<td class="px-4 py-2 text-primary">8%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right flex items-center justify-end gap-2">
+<div class="w-16 h-1 bg-outline-variant rounded-full overflow-hidden hidden sm:flex"><div class="bg-primary h-full w-[60%]"></div></div>
+                                800 MB
+                            </td>
+</tr>
+<tr class="bg-surface-dim/30 hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-2 pl-10 text-on-surface-variant flex items-center">
+<div class="truncate max-w-[200px]">GPU Process</div>
+</td>
+<td class="px-4 py-2 text-primary">4%</td>
+<td class="px-4 py-2 text-on-surface-variant text-right flex items-center justify-end gap-2">
+<div class="w-16 h-1 bg-outline-variant rounded-full overflow-hidden hidden sm:flex"><div class="bg-primary h-full w-[30%]"></div></div>
+                                450 MB
+                            </td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+</main>
+</body></html>

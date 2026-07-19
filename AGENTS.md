@@ -57,4 +57,13 @@ Implement the top unchecked `task_plan.md` item, then append to `progress.md`.
 - Docker `stats?stream=false` blocks ~1-2s per container (it samples CPU over one
   interval). Fetch container stats concurrently, or the whole live snapshot freezes for
   seconds×N-containers — the SSE frame only goes out after the full assembly returns.
+  Concurrency alone is not enough: keep Docker off the snapshot path entirely (it is served
+  from a background-refreshed cache) or every frame still pays the full cost.
+- Chromium-family processes (`brave`) write their command line **space-separated with no NUL
+  separators**, so `CmdlineSliceWithContext` returns the whole line in one slice element
+  while normal programs come back split. Split each element on whitespace before scanning for
+  flags — and write the fixture in that single-element shape, or the test passes against a
+  form production never produces.
+- `/proc/<pid>/cwd` for a sandboxed Chromium child is `/proc/<pid>/fdinfo`, not a real
+  directory; treat `/proc/*`, `/`, and `$HOME` as no working directory at all.
 - (living section — append a line on every gotcha you hit)

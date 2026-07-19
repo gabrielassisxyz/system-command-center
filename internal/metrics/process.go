@@ -10,10 +10,12 @@ import (
 
 // ProcessInfo groups the per-process readings needed to build a ProcessRow.
 type ProcessInfo struct {
-	PID  int32
-	Name string
-	CPU  float64
-	RAM  process.MemoryInfoStat
+	PID     int32
+	Name    string
+	CPU     float64
+	RAM     process.MemoryInfoStat
+	Cmdline []string
+	Cwd     string
 }
 
 // ProcessSource abstracts gopsutil process enumeration and per-process metric
@@ -47,6 +49,18 @@ func (GopsutilProcessSource) Info(ctx context.Context, p *process.Process) (Proc
 
 	if mem, err := p.MemoryInfoWithContext(ctx); err == nil && mem != nil {
 		info.RAM = *mem
+	}
+
+	// The command line is what tells same-named siblings apart, and it is one
+	// cheap /proc read (~6ms across every process on the machine).
+	if args, err := p.CmdlineSliceWithContext(ctx); err == nil {
+		info.Cmdline = args
+	}
+
+	// Cwd is readable only for the caller's own processes unless running as
+	// root, so a failure here is routine and simply leaves the field empty.
+	if cwd, err := p.CwdWithContext(ctx); err == nil {
+		info.Cwd = cwd
 	}
 
 	return info, nil
@@ -85,8 +99,9 @@ func (c *ProcessCollector) Collect(ctx context.Context) []model.ProcessRow {
 		}
 
 		row := model.ProcessRow{
-			PID:  info.PID,
-			Name: info.Name,
+			PID:    info.PID,
+			Name:   info.Name,
+			Detail: ProcessDetail(info.Name, info.Cmdline, info.Cwd),
 		}
 
 		cpu := info.CPU

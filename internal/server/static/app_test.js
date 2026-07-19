@@ -13,7 +13,8 @@ const appSource = fs.readFileSync(appPath, 'utf8');
 
 // Create a minimal DOM-like environment that app.js expects.
 const dom = {
-  system: { innerHTML: '', textContent: '' },
+  status: { textContent: '', dataset: {} },
+  system: { innerHTML: '' },
   processes: { innerHTML: '', querySelector: function () { return null; }, querySelectorAll: function () { return []; } },
   docker: { innerHTML: '', querySelectorAll: function () { return []; } },
 };
@@ -53,7 +54,7 @@ const body = appSource
 const helperSource =
   '(function () {\n' +
   body +
-  '\nreturn { escapeHtml: escapeHtml, fmtPercent: fmtPercent, fmtTemp: fmtTemp, fmtBytes: fmtBytes, fmtRate: fmtRate, sortProcesses: sortProcesses, sortByRamDesc: sortByRamDesc, renderSystem: renderSystem, renderProcesses: renderProcesses, renderDocker: renderDocker, render: render, killButton: killButton, containerButtons: containerButtons };' +
+  '\nreturn { escapeHtml: escapeHtml, fmtPercent: fmtPercent, fmtTemp: fmtTemp, fmtBytes: fmtBytes, fmtRate: fmtRate, sortProcesses: sortProcesses, sortByRamDesc: sortByRamDesc, renderSystem: renderSystem, renderProcesses: renderProcesses, renderDocker: renderDocker, render: render, killButton: killButton, containerButtons: containerButtons, meter: meter };' +
   '\n})()';
 const helpers = eval(helperSource); // eslint-disable-line no-eval
 
@@ -110,25 +111,75 @@ helpers.render({
   ],
 });
 
-assertContains('renderSystem cpu', dom.system.innerHTML, '25.5%');
-assertContains('renderSystem ram', dom.system.innerHTML, '8.0 GB / 16.0 GB');
-assertContains('renderSystem disk', dom.system.innerHTML, 'R 1.0 KB/s / W 2.0 KB/s');
-assertContains('renderSystem net', dom.system.innerHTML, 'RX 512 B/s / TX 256 B/s');
-assertContains('renderSystem temp', dom.system.innerHTML, 'Tctl: 55.0°C');
+assertContains('renderSystem cpu card', dom.system.innerHTML, '25.5%');
+assertContains('renderSystem ram card', dom.system.innerHTML, '8.0 GB');
+assertContains('renderSystem ram total', dom.system.innerHTML, 'of 16.0 GB');
+assertContains('renderSystem disk', dom.system.innerHTML, 'R 1.0 KB/s');
+assertContains('renderSystem disk write', dom.system.innerHTML, 'W 2.0 KB/s');
+assertContains('renderSystem net', dom.system.innerHTML, 'RX 512 B/s');
+assertContains('renderSystem temp label', dom.system.innerHTML, 'Tctl');
+assertContains('renderSystem temp value', dom.system.innerHTML, '55.0°C');
 assertContains('renderSystem gpu', dom.system.innerHTML, 'busy 80.0%');
+assertContains('renderSystem card markup', dom.system.innerHTML, 'class="card-label"');
 
-assertContains('renderProcesses heading', dom.processes.innerHTML, 'Processes');
+// The meter is four segments: half-lit for a partially covered segment, so a
+// 50% reading must fill exactly two and leave the rest dark.
+assertEq('meter 50%', helpers.meter(50),
+  '<div class="meter"><span class="on"></span><span class="on"></span><span></span><span></span></div>');
+assertEq('meter absent', helpers.meter(null), '');
+
+assertContains('renderProcesses heading', dom.processes.innerHTML, 'Programs &amp; Processes');
 assertContains('renderProcesses first row sorted by RAM', dom.processes.innerHTML, '<tr data-pid="42">');
 assertContains('renderProcesses name', dom.processes.innerHTML, 'browser');
 assertContains('renderProcesses disk io', dom.processes.innerHTML, 'R 100 B/s');
 assertContains('renderProcesses kill button', dom.processes.innerHTML, 'data-kill-pid="42"');
 assertContains('renderProcesses sort control', dom.processes.innerHTML, 'data-sort-select');
+// The biggest process anchors the bar scale at 100%.
+assertContains('renderProcesses ram bar', dom.processes.innerHTML, '<i style="width:100%"></i>');
 
 assertContains('renderDocker project', dom.docker.innerHTML, 'core');
+assertContains('renderDocker stack row', dom.docker.innerHTML, 'data-stack="core"');
+assertContains('renderDocker stack expanded', dom.docker.innerHTML, 'aria-expanded="true"');
+assertContains('renderDocker child linked to stack', dom.docker.innerHTML, 'data-stack-child="core"');
 assertContains('renderDocker container id', dom.docker.innerHTML, 'data-container-id="c1"');
 assertContains('renderDocker ungrouped', dom.docker.innerHTML, '(ungrouped)');
 assertContains('renderDocker stop button', dom.docker.innerHTML, 'data-container-stop="c1"');
 assertContains('renderDocker restart button', dom.docker.innerHTML, 'data-container-restart="c1"');
+// The stack row aggregates its containers rather than repeating a single one.
+assertContains('renderDocker stack aggregate ram', dom.docker.innerHTML, '128.0 MB');
+// Each stack carries a stop-all control seeded with its container ids.
+assertContains('renderDocker stop all', dom.docker.innerHTML, 'data-stack-stop="c1"');
+
+// Processes that share a name collapse into one aggregate row with a toggle,
+// mirroring the Docker stacks; a program that runs once stays a plain row.
+helpers.renderProcesses([
+  { pid: 10, name: 'brave', cpu: 5, ram: { used: 200 } },
+  { pid: 11, name: 'brave', cpu: 3, ram: { used: 100 } },
+  { pid: 12, name: 'solo', cpu: 1, ram: { used: 50 } },
+], 'ram');
+assertContains('renderProcesses group row', dom.processes.innerHTML, 'proc-group-row');
+assertContains('renderProcesses group count', dom.processes.innerHTML, '×2');
+assertContains('renderProcesses group aggregate ram', dom.processes.innerHTML, '300 B');
+assertContains('renderProcesses group children linked', dom.processes.innerHTML, 'data-proc-parent="0"');
+assertContains('renderProcesses group child hidden by default', dom.processes.innerHTML, 'data-proc-parent="0" data-pid="10" hidden');
+assertContains('renderProcesses singleton row', dom.processes.innerHTML, 'data-pid="12"');
+
+// The server-derived detail is what tells same-named siblings apart, so it has
+// to survive onto both the grouped children and the plain rows.
+helpers.renderProcesses([
+  { pid: 20, name: 'brave', detail: 'renderer', cpu: 4, ram: { used: 300 } },
+  { pid: 21, name: 'brave', detail: 'GPU', cpu: 2, ram: { used: 200 } },
+  { pid: 22, name: 'postgres', detail: 'appuser appdb 10.0.0.5(54321) idle', cpu: 1, ram: { used: 90 } },
+  { pid: 23, name: 'kthreadd', cpu: 0, ram: { used: 10 } },
+], 'ram');
+assertContains('detail on grouped child', dom.processes.innerHTML, '<span class="proc-detail">renderer</span>');
+assertContains('detail on second child', dom.processes.innerHTML, '<span class="proc-detail">GPU</span>');
+assertContains('detail on singleton row', dom.processes.innerHTML, 'appuser appdb 10.0.0.5(54321) idle');
+// A process with nothing to add must not render an empty separator.
+if (dom.processes.innerHTML.includes('<span class="proc-detail"></span>')) {
+  failures++;
+  console.error('FAIL empty detail should render no span');
+}
 
 const killBtn = helpers.killButton(123);
 assertContains('killButton has pid', killBtn, 'data-kill-pid="123"');
@@ -137,8 +188,17 @@ assertContains('killButton confirms', killBtn, 'kill 123?');
 const containerBtn = helpers.containerButtons('abc123');
 assertContains('containerButtons stop', containerBtn, 'data-container-stop="abc123"');
 assertContains('containerButtons restart', containerBtn, 'data-container-restart="abc123"');
-assertContains('containerButtons stop confirm', containerBtn, 'stop abc123?');
-assertContains('containerButtons restart confirm', containerBtn, 'restart abc123?');
+// Stop/restart fire on the first click — no confirmation step.
+if (containerBtn.includes('data-container-stop-yes') || containerBtn.includes('confirm')) {
+  failures++;
+  console.error('FAIL containerButtons has no confirm:\n  got: ' + containerBtn);
+}
+
+// A full 64-char id must reach the action endpoints intact but never be shown.
+const longID = '0123456789abcdef'.repeat(4);
+const longBtn = helpers.containerButtons(longID);
+assertContains('containerButtons keeps full id', longBtn, 'data-container-stop="' + longID + '"');
+assertContains('containerButtons shows short id in title', longBtn, 'Stop container 0123456789ab"');
 
 const byCpu = helpers.sortProcesses([
   { pid: 1, cpu: 5, ram: { used: 100 } },

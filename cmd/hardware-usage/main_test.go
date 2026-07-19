@@ -43,6 +43,10 @@ func TestNewAssemblerWiresProductionSources(t *testing.T) {
 // populated Snapshot JSON frame.
 func TestEventsEndpointBroadcastsRealSnapshot(t *testing.T) {
 	a := newTestAssemblerForServer(t)
+	// Docker is served from a background-refreshed cache (RunDockerRefresh in
+	// production primes it at startup); prime it here so the frame carries the
+	// fake source's containers.
+	a.RefreshDocker(context.Background())
 	hub := server.NewSSEHub(a, 0)
 	mux := server.NewMuxWithHub(hub)
 	s := httptest.NewServer(mux)

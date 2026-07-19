@@ -1,6 +1,7 @@
 (function () {
   'use strict';
 
+  const statusEl = document.getElementById('status');
   const systemEl = document.getElementById('system');
   const processesEl = document.getElementById('processes');
   const dockerEl = document.getElementById('docker');
@@ -45,58 +46,92 @@
     return fmtBytes(v) + '/s';
   }
 
-  function renderSystem(sys) {
-    const parts = [];
-    parts.push('<h2>System</h2>');
-    parts.push('<table>');
-    parts.push('<tr><th>CPU</th><td class="num">' + fmtPercent(sys.cpu) + '</td></tr>');
+  function setStatus(text, state) {
+    statusEl.textContent = text;
+    statusEl.dataset.state = state;
+  }
 
-    if (sys.ram) {
-      let ram = '—';
-      if (sys.ram.used !== undefined && sys.ram.total !== undefined) {
-        ram = fmtBytes(sys.ram.used) + ' / ' + fmtBytes(sys.ram.total);
-      } else if (sys.ram.used !== undefined) {
-        ram = fmtBytes(sys.ram.used);
-      }
-      parts.push('<tr><th>RAM</th><td class="num">' + ram + '</td></tr>');
+  // The reference design's card meter is four discrete segments. Each segment
+  // covers 25 points of the percentage; a partially covered segment renders at
+  // half opacity so the bar reads as an analog level, not a bucket count.
+  const METER_SEGMENTS = 4;
+
+  function meter(pct) {
+    if (pct === undefined || pct === null || isNaN(pct)) return '';
+    const filled = Math.max(0, Math.min(100, pct)) / (100 / METER_SEGMENTS);
+    let html = '<div class="meter">';
+    for (let i = 0; i < METER_SEGMENTS; i++) {
+      const coverage = Math.max(0, Math.min(1, filled - i));
+      const cls = coverage >= 0.75 ? ' class="on"' : (coverage >= 0.25 ? ' class="half"' : '');
+      html += '<span' + cls + '></span>';
+    }
+    return html + '</div>';
+  }
+
+  function metricCard(label, value, sub, pct) {
+    let html = '<div class="card">';
+    html += '<h3 class="card-label">' + escapeHtml(label) + '</h3>';
+    html += '<div class="card-value">' + escapeHtml(value) + '</div>';
+    if (sub) html += '<div class="card-sub">' + escapeHtml(sub) + '</div>';
+    html += meter(pct);
+    return html + '</div>';
+  }
+
+  function ratio(used, total) {
+    if (used === undefined || used === null) return null;
+    if (!total) return null;
+    return (used / total) * 100;
+  }
+
+  function renderSystem(sys) {
+    const cards = [];
+
+    if (sys.cpu !== undefined && sys.cpu !== null) {
+      cards.push(metricCard('CPU', fmtPercent(sys.cpu), '', sys.cpu));
+    }
+
+    if (sys.ram && sys.ram.used !== undefined) {
+      const sub = sys.ram.total !== undefined ? 'of ' + fmtBytes(sys.ram.total) : '';
+      cards.push(metricCard('RAM', fmtBytes(sys.ram.used), sub, ratio(sys.ram.used, sys.ram.total)));
     }
 
     if (sys.disk_io) {
-      const r = fmtRate(sys.disk_io.read);
-      const w = fmtRate(sys.disk_io.write);
-      parts.push('<tr><th>Disk I/O</th><td class="num">R ' + r + ' / W ' + w + '</td></tr>');
+      // A byte-rate has no ceiling to scale a meter against, so these cards show
+      // the raw read/write figures rather than a fabricated percentage.
+      cards.push(metricCard('Disk I/O', 'R ' + fmtRate(sys.disk_io.read), 'W ' + fmtRate(sys.disk_io.write), null));
     }
 
     if (sys.net_io) {
-      const rx = fmtRate(sys.net_io.rx);
-      const tx = fmtRate(sys.net_io.tx);
-      parts.push('<tr><th>Network</th><td class="num">RX ' + rx + ' / TX ' + tx + '</td></tr>');
+      cards.push(metricCard('Network', 'RX ' + fmtRate(sys.net_io.rx), 'TX ' + fmtRate(sys.net_io.tx), null));
     }
 
     if (sys.temps && sys.temps.length) {
-      const temps = sys.temps
-        .map(function (t) { return escapeHtml(t.label || 'temp') + ': ' + fmtTemp(t.value); })
-        .join(', ');
-      parts.push('<tr><th>Temps</th><td>' + temps + '</td></tr>');
+      // The hottest sensor is the one worth putting on the card; the rest stay
+      // in the subtitle count so a missing label never blanks the tile.
+      let hottest = null;
+      for (let i = 0; i < sys.temps.length; i++) {
+        const t = sys.temps[i];
+        if (t.value === undefined || t.value === null) continue;
+        if (!hottest || t.value > hottest.value) hottest = t;
+      }
+      if (hottest) {
+        cards.push(metricCard('Temp', fmtTemp(hottest.value), hottest.label || 'temp', hottest.value));
+      }
     }
 
     if (sys.gpu) {
       const g = sys.gpu;
-      const bits = [];
-      if (g.busy !== undefined) bits.push('busy ' + fmtPercent(g.busy));
-      if (g.vram_used !== undefined && g.vram_total !== undefined) {
-        bits.push('VRAM ' + fmtBytes(g.vram_used) + ' / ' + fmtBytes(g.vram_total));
-      } else if (g.vram_used !== undefined) {
-        bits.push('VRAM ' + fmtBytes(g.vram_used));
+      const sub = [];
+      if (g.vram_used !== undefined) {
+        sub.push('VRAM ' + fmtBytes(g.vram_used) + (g.vram_total !== undefined ? ' / ' + fmtBytes(g.vram_total) : ''));
       }
-      if (g.temp !== undefined) bits.push(fmtTemp(g.temp));
-      if (bits.length) {
-        parts.push('<tr><th>GPU</th><td>' + bits.join(', ') + '</td></tr>');
+      if (g.temp !== undefined) sub.push(fmtTemp(g.temp));
+      if (g.busy !== undefined || sub.length) {
+        cards.push(metricCard('GPU', g.busy !== undefined ? 'busy ' + fmtPercent(g.busy) : '—', sub.join(' · '), g.busy));
       }
     }
 
-    parts.push('</table>');
-    systemEl.innerHTML = parts.join('');
+    systemEl.innerHTML = cards.join('');
   }
 
   function sortProcesses(rows, key) {
@@ -128,47 +163,180 @@
     return sortProcesses(rows, 'ram');
   }
 
-  function renderProcesses(processes, sortKey) {
-    const sorted = sortProcesses(processes, sortKey || 'ram');
+  function panel(title, control, body) {
+    return '<div class="panel">' +
+      '<div class="panel-head"><h2>' + escapeHtml(title) + '</h2>' + (control || '') + '</div>' +
+      body +
+      '</div>';
+  }
 
-    let html = '<div class="section-head"><h2>Processes</h2>';
-    html += document.getElementById('process-sort-control').innerHTML;
-    html += '</div>';
-    if (!sorted.length) {
-      processesEl.innerHTML = html + '<p>No processes.</p>';
+  // Which process groups the user has expanded, keyed by program name. Groups
+  // default to collapsed — the whole point is one line per program — and the
+  // state lives outside the DOM so a re-render every 2s does not fold it back.
+  const expandedProcGroups = {};
+
+  // aggregateProcesses folds the flat process list into one entry per program
+  // name, summing CPU/RAM/disk. A program that runs once (e.g. systemd) stays a
+  // single-PID group and renders as a plain row.
+  function aggregateProcesses(rows) {
+    const byName = {};
+    for (let i = 0; i < rows.length; i++) {
+      const p = rows[i];
+      let g = byName[p.name];
+      if (!g) {
+        g = byName[p.name] = { name: p.name, procs: [], cpu: 0, ram: 0, diskRead: 0, diskWrite: 0 };
+      }
+      g.procs.push(p);
+      g.cpu += p.cpu || 0;
+      g.ram += (p.ram && p.ram.used) || 0;
+      g.diskRead += (p.disk_io && p.disk_io.read) || 0;
+      g.diskWrite += (p.disk_io && p.disk_io.write) || 0;
+    }
+    return Object.keys(byName).map(function (k) { return byName[k]; });
+  }
+
+  function groupSortValue(g, key) {
+    switch (key) {
+      case 'cpu': return g.cpu;
+      case 'disk_io': return g.diskRead + g.diskWrite;
+      default: return g.ram;
+    }
+  }
+
+  function sortProcessGroups(groups, key) {
+    return groups.slice().sort(function (a, b) {
+      return groupSortValue(b, key) - groupSortValue(a, key);
+    });
+  }
+
+  // The RAM bar is relative to the heaviest program this frame — an absolute
+  // scale would leave every bar invisible on a 64 GB machine.
+  function ramCell(used, maxRam) {
+    const label = (used !== null && used !== undefined) ? fmtBytes(used) : '—';
+    const width = (used && maxRam) ? Math.round((used / maxRam) * 100) : 0;
+    return '<div class="ram-cell"><span class="bar"><i style="width:' + width +
+      '%"></i></span>' + label + '</div>';
+  }
+
+  function diskCell(read, write) {
+    return 'R ' + fmtRate(read) + '<br>W ' + fmtRate(write);
+  }
+
+  // The detail is what identifies one of 27 "brave" or 12 "node" rows: the
+  // Chromium role, the script, the PostgreSQL backend title, the working
+  // directory. Absent for processes that have nothing to add.
+  function detailSpan(detail) {
+    if (!detail) return '';
+    return '<span class="proc-detail">' + escapeHtml(detail) + '</span>';
+  }
+
+  function procRow(p, maxRam) {
+    const used = (p.ram && p.ram.used !== undefined) ? p.ram.used : null;
+    return '<tr data-pid="' + p.pid + '">' +
+      '<td><div class="proc-name">' + escapeHtml(p.name) + detailSpan(p.detail) + '</div></td>' +
+      '<td>' + p.pid + '</td>' +
+      '<td class="num accent">' + fmtPercent(p.cpu) + '</td>' +
+      '<td class="num">' + ramCell(used, maxRam) + '</td>' +
+      '<td class="num">' + diskCell(p.disk_io && p.disk_io.read, p.disk_io && p.disk_io.write) + '</td>' +
+      '<td>' + killButton(p.pid) + '</td>' +
+      '</tr>';
+  }
+
+  // The child rows are linked to their header by numeric index, not by program
+  // name: a name can hold spaces or quotes that would break an attribute
+  // selector, whereas an index is always selector-safe.
+  function procGroupRow(g, idx, expanded, maxRam) {
+    return '<tr class="proc-group-row" data-proc-idx="' + idx + '"' +
+      ' data-proc-name="' + escapeHtml(g.name) + '"' +
+      ' aria-expanded="' + (expanded ? 'true' : 'false') + '">' +
+      '<td><div class="proc-group-name"><span class="caret">▾</span>' +
+      escapeHtml(g.name) + '<span class="proc-count">×' + g.procs.length + '</span></div></td>' +
+      '<td></td>' +
+      '<td class="num accent">' + fmtPercent(g.cpu) + '</td>' +
+      '<td class="num">' + ramCell(g.ram, maxRam) + '</td>' +
+      '<td class="num">' + diskCell(g.diskRead, g.diskWrite) + '</td>' +
+      '<td></td>' +
+      '</tr>';
+  }
+
+  function procChildRow(p, idx, expanded, maxRam) {
+    const used = (p.ram && p.ram.used !== undefined) ? p.ram.used : null;
+    return '<tr class="proc-child-row" data-proc-parent="' + idx + '" data-pid="' + p.pid + '"' +
+      (expanded ? '' : ' hidden') + '>' +
+      '<td><div class="proc-child-name">' + escapeHtml(p.name) + detailSpan(p.detail) + '</div></td>' +
+      '<td>' + p.pid + '</td>' +
+      '<td class="num accent">' + fmtPercent(p.cpu) + '</td>' +
+      '<td class="num">' + ramCell(used, maxRam) + '</td>' +
+      '<td class="num">' + diskCell(p.disk_io && p.disk_io.read, p.disk_io && p.disk_io.write) + '</td>' +
+      '<td>' + killButton(p.pid) + '</td>' +
+      '</tr>';
+  }
+
+  function renderProcesses(processes, sortKey) {
+    const key = sortKey || 'ram';
+    const control = document.getElementById('process-sort-control').innerHTML;
+    const groups = sortProcessGroups(aggregateProcesses(processes), key);
+
+    if (!groups.length) {
+      processesEl.innerHTML = panel('Programs & Processes', control, '<p class="panel-empty">No processes.</p>');
       return;
     }
 
-    html += '<table><thead><tr>';
-    html += '<th>Name</th><th>PID</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">Disk I/O</th><th>Actions</th>';
-    html += '</tr></thead><tbody>';
-
-    for (let i = 0; i < sorted.length; i++) {
-      const p = sorted[i];
-      const ram = (p.ram && p.ram.used !== undefined) ? fmtBytes(p.ram.used) : '—';
-      const diskRead = fmtRate(p.disk_io && p.disk_io.read);
-      const diskWrite = fmtRate(p.disk_io && p.disk_io.write);
-      html += '<tr data-pid="' + p.pid + '">';
-      html += '<td>' + escapeHtml(p.name) + '</td>';
-      html += '<td>' + p.pid + '</td>';
-      html += '<td class="num">' + fmtPercent(p.cpu) + '</td>';
-      html += '<td class="num">' + ram + '</td>';
-      html += '<td class="num">R ' + diskRead + '<br>W ' + diskWrite + '</td>';
-      html += '<td>' + killButton(p.pid) + '</td>';
-      html += '</tr>';
+    // Scale the bars against the heaviest aggregated group; child rows share the
+    // same scale so a PID's bar reads as its slice of the machine, not its group.
+    let maxRam = 0;
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i].ram > maxRam) maxRam = groups[i].ram;
     }
 
-    html += '</tbody></table>';
-    processesEl.innerHTML = html;
+    let rows = '<div class="panel-body"><table><thead><tr>';
+    rows += '<th>Process</th><th>PID</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">Disk I/O</th><th>Actions</th>';
+    rows += '</tr></thead><tbody>';
+
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (g.procs.length === 1) {
+        rows += procRow(g.procs[0], maxRam);
+        continue;
+      }
+      const expanded = !!expandedProcGroups[g.name];
+      rows += procGroupRow(g, i, expanded, maxRam);
+      const children = sortProcesses(g.procs, key);
+      for (let j = 0; j < children.length; j++) {
+        rows += procChildRow(children[j], i, expanded, maxRam);
+      }
+    }
+
+    rows += '</tbody></table></div>';
+    processesEl.innerHTML = panel('Programs & Processes', control, rows);
 
     const select = processesEl.querySelector('[data-sort-select]');
     if (select) {
-      select.value = sortKey || 'ram';
+      select.value = key;
       select.addEventListener('change', function () {
-        renderProcesses(processes, select.value);
+        // Persist the choice: the next SSE frame re-renders from currentSortKey,
+        // and without this the list would snap back to RAM within a second.
+        currentSortKey = select.value;
+        renderProcesses(processes, currentSortKey);
       });
     }
+    bindProcGroupRows(processesEl);
     bindKillButtons(processesEl);
+  }
+
+  function bindProcGroupRows(root) {
+    root.querySelectorAll('[data-proc-idx]').forEach(function (row) {
+      row.addEventListener('click', function () {
+        const idx = row.dataset.procIdx;
+        const name = row.dataset.procName;
+        const expanded = !expandedProcGroups[name];
+        expandedProcGroups[name] = expanded;
+        row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        root.querySelectorAll('[data-proc-parent="' + idx + '"]').forEach(function (child) {
+          child.hidden = !expanded;
+        });
+      });
+    });
   }
 
   function killButton(pid) {
@@ -214,123 +382,199 @@
     });
   }
 
+  // Stop/restart are reversible, so they fire on the first click with no
+  // confirmation. The optimistic "stopping…" label below is the feedback that
+  // the request is in flight.
   function containerButtons(id) {
+    const short = escapeHtml(shortID(id));
     return '<div class="btn-row" data-container-row="' + escapeHtml(id) + '">' +
-      '<button class="btn stop" data-container-stop="' + escapeHtml(id) + '" title="Stop container ' + escapeHtml(id) + '">stop</button>' +
-      '<button class="btn restart" data-container-restart="' + escapeHtml(id) + '" title="Restart container ' + escapeHtml(id) + '">restart</button>' +
-      '<span class="btn confirm confirm-stop">stop ' + escapeHtml(id) + '? ' +
-      '<button class="btn yes" data-container-stop-yes="' + escapeHtml(id) + '">yes</button>' +
-      '<button class="btn no" data-container-no="' + escapeHtml(id) + '">no</button>' +
-      '</span>' +
-      '<span class="btn confirm confirm-restart">restart ' + escapeHtml(id) + '? ' +
-      '<button class="btn yes" data-container-restart-yes="' + escapeHtml(id) + '">yes</button>' +
-      '<button class="btn no" data-container-no="' + escapeHtml(id) + '">no</button>' +
-      '</span></div>';
+      '<button class="btn stop" data-container-stop="' + escapeHtml(id) + '" title="Stop container ' + short + '">stop</button>' +
+      '<button class="btn restart" data-container-restart="' + escapeHtml(id) + '" title="Restart container ' + short + '">restart</button>' +
+      '</div>';
+  }
+
+  // In-flight stop/restart requests, keyed by container id, each with an expiry.
+  // A frame rebuilds the table from scratch, so this state (like the fold state)
+  // has to live outside the DOM or the label would vanish on the next SSE frame.
+  const pendingContainers = {};
+  const PENDING_TTL_MS = 10000;
+
+  function statusLabel(action) {
+    return '<span class="btn-status">' + (action === 'stop' ? 'stopping…' : 'restarting…') + '</span>';
+  }
+
+  // containerActions is what the table renders: the pending label while a
+  // request is outstanding, otherwise the action buttons.
+  function containerActions(id) {
+    const p = pendingContainers[id];
+    if (p && p.until > Date.now()) return statusLabel(p.action);
+    return containerButtons(id);
+  }
+
+  function prunePending() {
+    const now = Date.now();
+    for (const id in pendingContainers) {
+      if (pendingContainers[id].until <= now) delete pendingContainers[id];
+    }
   }
 
   function bindContainerButtons(root) {
     root.querySelectorAll('[data-container-stop]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const row = root.querySelector('[data-container-row="' + btn.dataset.containerStop + '"]');
-        if (row) row.classList.add('confirming-stop');
-      });
+      btn.addEventListener('click', function () { runContainerAction('stop', btn.dataset.containerStop); });
     });
     root.querySelectorAll('[data-container-restart]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const row = root.querySelector('[data-container-row="' + btn.dataset.containerRestart + '"]');
-        if (row) row.classList.add('confirming-restart');
-      });
+      btn.addEventListener('click', function () { runContainerAction('restart', btn.dataset.containerRestart); });
     });
-    root.querySelectorAll('[data-container-stop-yes]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        postContainerAction('stop', btn.dataset.containerStopYes);
-        const row = root.querySelector('[data-container-row="' + btn.dataset.containerStopYes + '"]');
-        if (row) {
-          row.classList.remove('confirming-stop');
-          row.classList.remove('confirming-restart');
-        }
-      });
-    });
-    root.querySelectorAll('[data-container-restart-yes]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        postContainerAction('restart', btn.dataset.containerRestartYes);
-        const row = root.querySelector('[data-container-row="' + btn.dataset.containerRestartYes + '"]');
-        if (row) {
-          row.classList.remove('confirming-stop');
-          row.classList.remove('confirming-restart');
-        }
-      });
-    });
-    root.querySelectorAll('[data-container-no]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const row = root.querySelector('[data-container-row="' + btn.dataset.containerNo + '"]');
-        if (row) {
-          row.classList.remove('confirming-stop');
-          row.classList.remove('confirming-restart');
-        }
-      });
-    });
+  }
+
+  // runContainerAction records the pending state, paints the label immediately
+  // (so feedback does not wait for the next SSE frame), then posts the request.
+  function runContainerAction(action, id) {
+    pendingContainers[id] = { action: action, until: Date.now() + PENDING_TTL_MS };
+    const row = dockerEl.querySelector('[data-container-row="' + id + '"]');
+    if (row) row.outerHTML = statusLabel(action);
+    postContainerAction(action, id);
   }
 
   function postContainerAction(action, id) {
     fetch('/api/container/' + action + '?id=' + encodeURIComponent(id), { method: 'POST' }).then(function (res) {
       if (!res.ok) {
+        delete pendingContainers[id];
         console.error('container ' + action + ' failed:', res.status);
         alert('Failed to ' + action + ' container ' + id + ': ' + res.status);
       }
     }).catch(function (err) {
+      delete pendingContainers[id];
       console.error('container ' + action + ' error:', err);
       alert('Failed to ' + action + ' container ' + id + ': ' + err);
     });
   }
 
+  // Which stacks the user has collapsed, keyed by compose project. Every SSE
+  // frame rebuilds the table from scratch, so the fold state has to live
+  // outside the DOM or it would spring back open once a second.
+  const collapsedStacks = {};
+
+  // A stack row shows one pulsing dot per container, capped so a 30-container
+  // stack does not push the CPU and RAM columns off screen.
+  const MAX_STACK_DOTS = 6;
+
+  // Docker's own short-id length. The full 64-char id stays in the data
+  // attributes the action endpoints read; displaying it would push the CPU and
+  // RAM columns off the right edge of the table.
+  const SHORT_ID_LEN = 12;
+
+  function shortID(id) {
+    return String(id).slice(0, SHORT_ID_LEN);
+  }
+
+  function stackDots(count) {
+    let html = '<span class="dots">';
+    for (let i = 0; i < Math.min(count, MAX_STACK_DOTS); i++) html += '<i></i>';
+    html += '</span>';
+    if (count > MAX_STACK_DOTS) html += '<span class="container-id">+' + (count - MAX_STACK_DOTS) + '</span>';
+    return html;
+  }
+
   function renderDocker(groups) {
-    let html = '<div class="section-head"><h2>Docker</h2></div>';
+    prunePending();
+
     if (!groups || !groups.length) {
-      dockerEl.innerHTML = html + '<p>No Docker containers.</p>';
+      dockerEl.innerHTML = panel('Docker Stacks', '', '<p class="panel-empty">No Docker containers.</p>');
       return;
     }
 
+    let rows = '<div class="panel-body"><table><thead><tr>';
+    rows += '<th>Stack / Container</th><th>ID</th><th class="num">CPU</th><th class="num">RAM</th><th>Actions</th>';
+    rows += '</tr></thead><tbody>';
+
     for (let i = 0; i < groups.length; i++) {
       const g = groups[i];
-      html += '<h3>' + escapeHtml(g.project) + '</h3>';
-      html += '<table><thead><tr>';
-      html += '<th>Name</th><th>ID</th><th class="num">CPU</th><th class="num">RAM</th><th>Actions</th>';
-      html += '</tr></thead><tbody>';
+      const collapsed = !!collapsedStacks[g.project];
+
+      let cpuTotal = 0;
+      let ramTotal = 0;
+      for (let j = 0; j < g.containers.length; j++) {
+        cpuTotal += g.containers[j].cpu || 0;
+        ramTotal += (g.containers[j].ram && g.containers[j].ram.used) || 0;
+      }
+
+      // Container ids are 64-char hex, so a comma join is a safe, selector-free
+      // way to hand the whole stack to the stop-all handler.
+      const ids = g.containers.map(function (c) { return c.id; }).join(',');
+
+      rows += '<tr class="stack-row" data-stack="' + escapeHtml(g.project) + '"' +
+        ' aria-expanded="' + (collapsed ? 'false' : 'true') + '">';
+      rows += '<td><div class="stack-name"><span class="caret">▾</span>' +
+        escapeHtml(g.project) + stackDots(g.containers.length) + '</div></td>';
+      rows += '<td></td>';
+      rows += '<td class="num accent">' + fmtPercent(cpuTotal) + '</td>';
+      rows += '<td class="num">' + fmtBytes(ramTotal) + '</td>';
+      rows += '<td><button class="btn stop" data-stack-stop="' + escapeHtml(ids) + '"' +
+        ' title="Stop all ' + g.containers.length + ' containers in ' + escapeHtml(g.project) + '">stop all</button></td>';
+      rows += '</tr>';
 
       for (let j = 0; j < g.containers.length; j++) {
         const c = g.containers[j];
         const ram = (c.ram && c.ram.used !== undefined) ? fmtBytes(c.ram.used) : '—';
-        html += '<tr data-container-id="' + escapeHtml(c.id) + '">';
-        html += '<td>' + escapeHtml(c.name) + '</td>';
-        html += '<td>' + escapeHtml(c.id) + '</td>';
-        html += '<td class="num">' + fmtPercent(c.cpu) + '</td>';
-        html += '<td class="num">' + ram + '</td>';
-        html += '<td>' + containerButtons(c.id) + '</td>';
-        html += '</tr>';
+        rows += '<tr class="container-row" data-container-id="' + escapeHtml(c.id) + '"' +
+          ' data-stack-child="' + escapeHtml(g.project) + '"' + (collapsed ? ' hidden' : '') + '>';
+        rows += '<td><div class="container-name">' + escapeHtml(c.name) + '</div></td>';
+        rows += '<td class="container-id">' + escapeHtml(shortID(c.id)) + '</td>';
+        rows += '<td class="num accent">' + fmtPercent(c.cpu) + '</td>';
+        rows += '<td class="num">' + ram + '</td>';
+        rows += '<td>' + containerActions(c.id) + '</td>';
+        rows += '</tr>';
       }
-
-      html += '</tbody></table>';
     }
 
-    dockerEl.innerHTML = html;
+    rows += '</tbody></table></div>';
+    dockerEl.innerHTML = panel('Docker Stacks', '', rows);
+
+    bindStackRows(dockerEl);
+    bindStackStop(dockerEl);
     bindContainerButtons(dockerEl);
+  }
+
+  function bindStackStop(root) {
+    root.querySelectorAll('[data-stack-stop]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        // Stop the propagation so stopping the stack does not also toggle its fold.
+        e.stopPropagation();
+        const ids = btn.dataset.stackStop ? btn.dataset.stackStop.split(',') : [];
+        ids.forEach(function (id) { runContainerAction('stop', id); });
+      });
+    });
+  }
+
+  function bindStackRows(root) {
+    root.querySelectorAll('[data-stack]').forEach(function (row) {
+      row.addEventListener('click', function () {
+        const project = row.dataset.stack;
+        const collapsed = !collapsedStacks[project];
+        collapsedStacks[project] = collapsed;
+        row.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        root.querySelectorAll('[data-stack-child="' + project + '"]').forEach(function (child) {
+          child.hidden = collapsed;
+        });
+      });
+    });
   }
 
   let currentSortKey = 'ram';
 
   function render(snapshot) {
     renderSystem(snapshot.system || {});
-    renderProcesses(snapshot.processes || [], currentSortKey);
     renderDocker(snapshot.docker || []);
+    renderProcesses(snapshot.processes || [], currentSortKey);
   }
 
   function connect() {
-    systemEl.textContent = 'Connecting…';
+    setStatus('Connecting…', 'connecting');
     const es = new EventSource('/events');
 
     es.addEventListener('open', function () {
-      systemEl.textContent = 'Connected';
+      setStatus('Live', 'live');
     });
 
     es.addEventListener('message', function (ev) {
@@ -342,7 +586,7 @@
     });
 
     es.addEventListener('error', function () {
-      systemEl.textContent = 'Connection lost. Retrying…';
+      setStatus('Reconnecting…', 'lost');
     });
   }
 

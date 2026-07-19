@@ -85,3 +85,29 @@
   server on `127.0.0.1:8765`, opening it shows a live system header + per-program list +
   Docker-grouped list sorted by RAM by default (the IDEA done-check passes), and `bin/ci` is
   green.
+
+## Phase 5 — v2 (not started)
+
+- [ ] Process detail panel — clicking a process row opens a side panel showing everything
+  `/proc` exposes for that pid: full command line, working directory, executable path, thread
+  count, state, parent pid, nice, swap, context switches, and open file descriptor count.
+  Collecting these is cheap (~10 ms for every process on the machine), so the work is the
+  panel itself plus fetching detail for one pid on demand instead of widening every frame.
+  — done when: clicking a row opens the panel for that pid showing the full command line and
+  the fields above, fields that cannot be read render as absent rather than empty or zero,
+  and dismissing the panel restores the table with its fold state intact.
+- [ ] Evaluate Chromium remote debugging for tab-level identity — decide before building.
+  A browser child advertises only `--renderer-client-id`, an internal counter that maps to no
+  tab title, so `/proc` alone can never name the tab or extension holding the RAM; the role
+  (`renderer`, `GPU`, `extension`, a named utility service) is the ceiling. The Chrome
+  DevTools Protocol can supply tab titles, but only against a browser started with
+  `--remote-debugging-port`. Weigh at least three options — leave it at the role, an opt-in
+  flag the operator enables deliberately, and attaching to CDP whenever the port is found —
+  against: the port grants full control of the browser (cookies, session, arbitrary script
+  execution) to any local process that reaches it, which is a materially different exposure
+  from reading `/proc`; it requires restarting the browser with a non-default flag; it binds
+  a general tool to one browser family; and it adds a second live data source with its own
+  lifecycle and failure modes to a contract that is currently "read `/proc` and the Docker
+  socket". — done when: the three options are compared in writing on security surface, setup
+  cost, and what each actually buys, and the resulting decision (build / defer / reject) is
+  recorded in `findings.md` with its reasoning.
