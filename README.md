@@ -9,9 +9,12 @@ See `IDEA.md` for the full intent and `AGENTS.md` for how the repo is built.
 ```sh
 bin/install-hooks   # once, after clone — installs the gitleaks pre-commit hook
 bin/dev             # serves http://127.0.0.1:8765
+docker compose up --build
 ```
 
 Open http://127.0.0.1:8765: a live system header (CPU, RAM, disk & network I/O, temperature, AMD GPU), a per-process list sorted heaviest-first (RAM by default, toggle to CPU or disk I/O), and Docker containers grouped by their compose stack. Each process has a kill button (SIGTERM); each container has stop/restart — both behind a confirmation.
+
+The compose service serves http://127.0.0.1:8787. It uses the host network and host PID namespace so the server can observe the desktop rather than the container, and mounts `/var/run/docker.sock` so Docker container stats and stop/restart actions keep working.
 
 Per-process disk I/O reads `/proc/<pid>/io`, which the kernel restricts to the process owner. Run `bin/dev` unprivileged and you see disk I/O for your own processes only; run `sudo bin/dev` for complete per-process disk I/O across the machine. Everything else (system header, container stats, kill/stop/restart) works without `sudo`.
 
