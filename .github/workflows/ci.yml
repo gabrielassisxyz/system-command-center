@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # bin/ci runs the prose gate, which resolves a merge base to find the
+          # lines this branch adds. A shallow clone has no base commit to reach.
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -18,16 +22,7 @@ jobs:
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
           go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: bin/ci
+        env:
+          # Empty on a push, where the fallback (origin/main) is the right base anyway.
+          SLOP_GUARD_BASE: ${{ github.event.pull_request.base.sha }}
         run: ./bin/ci
-
-  # The PR title and body never touch the git tree, so the same gate runs over them here.
-  slop-guard-pr:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - env:
-          TITLE: ${{ github.event.pull_request.title }}
-          BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s\n%s\n' "$TITLE" "$BODY" | bin/slop-guard --stdin "PR text"

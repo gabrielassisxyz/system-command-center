@@ -25,6 +25,6 @@ echo "==> govulncheck"
 govulncheck ./...
 
 # anti-slop gate: em-dash in prose + the tool-name leak. Canonical: llm-workflow bin/slop-guard.
-echo "==> slop-guard"; bin/slop-guard
+echo "==> slop-guard"; bin/slop-guard --diff "${SLOP_GUARD_BASE:-origin/main}"
 
 echo "OK — all gates green"
