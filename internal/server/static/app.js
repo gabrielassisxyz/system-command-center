@@ -5,6 +5,7 @@
   const systemEl = document.getElementById('system');
   const processesEl = document.getElementById('processes');
   const dockerEl = document.getElementById('docker');
+  let latestSnapshot = null;
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (ch) {
@@ -311,32 +312,7 @@
     processesEl.innerHTML = panel('Programs & Processes', control, rows);
 
     const select = processesEl.querySelector('[data-sort-select]');
-    if (select) {
-      select.value = key;
-      select.addEventListener('change', function () {
-        // Persist the choice: the next SSE frame re-renders from currentSortKey,
-        // and without this the list would snap back to RAM within a second.
-        currentSortKey = select.value;
-        renderProcesses(processes, currentSortKey);
-      });
-    }
-    bindProcGroupRows(processesEl);
-    bindKillButtons(processesEl);
-  }
-
-  function bindProcGroupRows(root) {
-    root.querySelectorAll('[data-proc-idx]').forEach(function (row) {
-      row.addEventListener('click', function () {
-        const idx = row.dataset.procIdx;
-        const name = row.dataset.procName;
-        const expanded = !expandedProcGroups[name];
-        expandedProcGroups[name] = expanded;
-        row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        root.querySelectorAll('[data-proc-parent="' + idx + '"]').forEach(function (child) {
-          child.hidden = !expanded;
-        });
-      });
-    });
+    if (select) select.value = key;
   }
 
   function killButton(pid) {
@@ -346,28 +322,6 @@
       '<button class="btn yes" data-kill-yes="' + pid + '">yes</button>' +
       '<button class="btn no" data-kill-no="' + pid + '">no</button>' +
       '</span></div>';
-  }
-
-  function bindKillButtons(root) {
-    root.querySelectorAll('[data-kill-pid]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const row = root.querySelector('[data-kill-row="' + btn.dataset.killPid + '"]');
-        if (row) row.classList.add('confirming');
-      });
-    });
-    root.querySelectorAll('[data-kill-yes]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        postKill(parseInt(btn.dataset.killYes, 10));
-        const row = root.querySelector('[data-kill-row="' + btn.dataset.killYes + '"]');
-        if (row) row.classList.remove('confirming');
-      });
-    });
-    root.querySelectorAll('[data-kill-no]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const row = root.querySelector('[data-kill-row="' + btn.dataset.killNo + '"]');
-        if (row) row.classList.remove('confirming');
-      });
-    });
   }
 
   function postKill(pid) {
@@ -531,42 +485,104 @@
     rows += '</tbody></table></div>';
     dockerEl.innerHTML = panel('Docker Stacks', '', rows);
 
-    bindStackRows(dockerEl);
-    bindStackStop(dockerEl);
-    bindContainerButtons(dockerEl);
-  }
-
-  function bindStackStop(root) {
-    root.querySelectorAll('[data-stack-stop]').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        // Stop the propagation so stopping the stack does not also toggle its fold.
-        e.stopPropagation();
-        const ids = btn.dataset.stackStop ? btn.dataset.stackStop.split(',') : [];
-        ids.forEach(function (id) { runContainerAction('stop', id); });
-      });
-    });
-  }
-
-  function bindStackRows(root) {
-    root.querySelectorAll('[data-stack]').forEach(function (row) {
-      row.addEventListener('click', function () {
-        const project = row.dataset.stack;
-        const collapsed = !collapsedStacks[project];
-        collapsedStacks[project] = collapsed;
-        row.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        root.querySelectorAll('[data-stack-child="' + project + '"]').forEach(function (child) {
-          child.hidden = collapsed;
-        });
-      });
-    });
   }
 
   let currentSortKey = 'ram';
 
   function render(snapshot) {
+    latestSnapshot = snapshot;
     renderSystem(snapshot.system || {});
     renderDocker(snapshot.docker || []);
     renderProcesses(snapshot.processes || [], currentSortKey);
+  }
+
+  function closest(target, selector) {
+    return target && target.closest ? target.closest(selector) : null;
+  }
+
+  function forEachNode(nodes, fn) {
+    Array.prototype.forEach.call(nodes, fn);
+  }
+
+  function handleProcessChange(e) {
+    const select = closest(e.target, '[data-sort-select]');
+    if (!select) return;
+    // Persist the choice: the next SSE frame re-renders from currentSortKey,
+    // and without this the list would snap back to RAM within a second.
+    currentSortKey = select.value;
+    renderProcesses((latestSnapshot && latestSnapshot.processes) || [], currentSortKey);
+  }
+
+  function handleProcessClick(e) {
+    const kill = closest(e.target, '[data-kill-pid]');
+    if (kill) {
+      const row = processesEl.querySelector('[data-kill-row="' + kill.dataset.killPid + '"]');
+      if (row) row.classList.add('confirming');
+      return;
+    }
+
+    const yes = closest(e.target, '[data-kill-yes]');
+    if (yes) {
+      postKill(parseInt(yes.dataset.killYes, 10));
+      const row = processesEl.querySelector('[data-kill-row="' + yes.dataset.killYes + '"]');
+      if (row) row.classList.remove('confirming');
+      return;
+    }
+
+    const no = closest(e.target, '[data-kill-no]');
+    if (no) {
+      const row = processesEl.querySelector('[data-kill-row="' + no.dataset.killNo + '"]');
+      if (row) row.classList.remove('confirming');
+      return;
+    }
+
+    const group = closest(e.target, '[data-proc-idx]');
+    if (!group) return;
+    const idx = group.dataset.procIdx;
+    const name = group.dataset.procName;
+    const expanded = !expandedProcGroups[name];
+    expandedProcGroups[name] = expanded;
+    group.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    forEachNode(processesEl.querySelectorAll('[data-proc-parent="' + idx + '"]'), function (child) {
+      child.hidden = !expanded;
+    });
+  }
+
+  function handleDockerClick(e) {
+    const stackStop = closest(e.target, '[data-stack-stop]');
+    if (stackStop) {
+      const ids = stackStop.dataset.stackStop ? stackStop.dataset.stackStop.split(',') : [];
+      ids.forEach(function (id) { runContainerAction('stop', id); });
+      return;
+    }
+
+    const stop = closest(e.target, '[data-container-stop]');
+    if (stop) {
+      runContainerAction('stop', stop.dataset.containerStop);
+      return;
+    }
+
+    const restart = closest(e.target, '[data-container-restart]');
+    if (restart) {
+      runContainerAction('restart', restart.dataset.containerRestart);
+      return;
+    }
+
+    const stack = closest(e.target, '[data-stack]');
+    if (!stack) return;
+    const project = stack.dataset.stack;
+    const collapsed = !collapsedStacks[project];
+    collapsedStacks[project] = collapsed;
+    stack.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    forEachNode(dockerEl.querySelectorAll('[data-stack-child="' + project + '"]'), function (child) {
+      child.hidden = collapsed;
+    });
+  }
+
+  function bindStaticHandlers() {
+    processesEl.addEventListener('change', handleProcessChange);
+    processesEl.addEventListener('click', handleProcessClick);
+    dockerEl.addEventListener('click', handleDockerClick);
   }
 
   function connect() {
@@ -591,8 +607,12 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', connect);
+    document.addEventListener('DOMContentLoaded', function () {
+      bindStaticHandlers();
+      connect();
+    });
   } else {
+    bindStaticHandlers();
     connect();
   }
 })();

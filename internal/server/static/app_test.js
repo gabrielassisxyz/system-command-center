@@ -12,12 +12,30 @@ const appPath = path.join(__dirname, 'app.js');
 const appSource = fs.readFileSync(appPath, 'utf8');
 
 // Create a minimal DOM-like environment that app.js expects.
+function fakeElement(initial) {
+  const el = initial || {};
+  el.listeners = {};
+  el.addEventListener = function (name, fn) {
+    if (!this.listeners[name]) this.listeners[name] = [];
+    this.listeners[name].push(fn);
+  };
+  el.querySelector = el.querySelector || function () { return null; };
+  el.querySelectorAll = el.querySelectorAll || function () { return []; };
+  return el;
+}
+
 const dom = {
-  status: { textContent: '', dataset: {} },
-  system: { innerHTML: '' },
-  processes: { innerHTML: '', querySelector: function () { return null; }, querySelectorAll: function () { return []; } },
-  docker: { innerHTML: '', querySelectorAll: function () { return []; } },
+  status: fakeElement({ textContent: '', dataset: {} }),
+  system: fakeElement({ innerHTML: '' }),
+  processes: fakeElement({ innerHTML: '' }),
+  docker: fakeElement({ innerHTML: '' }),
 };
+
+function listenerCount(el) {
+  return Object.keys(el.listeners).reduce(function (sum, name) {
+    return sum + el.listeners[name].length;
+  }, 0);
+}
 
 global.document = {
   readyState: 'complete',
@@ -149,6 +167,21 @@ assertContains('renderDocker restart button', dom.docker.innerHTML, 'data-contai
 assertContains('renderDocker stack aggregate ram', dom.docker.innerHTML, '128.0 MB');
 // Each stack carries a stop-all control seeded with its container ids.
 assertContains('renderDocker stop all', dom.docker.innerHTML, 'data-stack-stop="c1"');
+
+const processListenersAfterFirstRender = listenerCount(dom.processes);
+const dockerListenersAfterFirstRender = listenerCount(dom.docker);
+helpers.render({
+  system: {},
+  processes: [
+    { pid: 1, name: 'init', cpu: 1.5, ram: { used: 1 * 1024 * 1024 } },
+    { pid: 42, name: 'browser', cpu: 30, ram: { used: 512 * 1024 * 1024 } },
+  ],
+  docker: [
+    { project: 'core', containers: [{ id: 'c1', name: 'app', cpu: 5, ram: { used: 128 * 1024 * 1024 } }] },
+  ],
+});
+assertEq('render does not add process listeners per frame', listenerCount(dom.processes), processListenersAfterFirstRender);
+assertEq('render does not add docker listeners per frame', listenerCount(dom.docker), dockerListenersAfterFirstRender);
 
 // Processes that share a name collapse into one aggregate row with a toggle,
 // mirroring the Docker stacks; a program that runs once stays a plain row.
